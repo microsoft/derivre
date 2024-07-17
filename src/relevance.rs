@@ -13,6 +13,12 @@ pub struct RelevanceCache {
     sym_deriv: HashMap<ExprRef, SymRes>,
 }
 
+fn swap_each<A: Copy>(v: &mut Vec<(A, A)>) {
+    for i in 0..v.len() {
+        v[i] = (v[i].1, v[i].0);
+    }
+}
+
 fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
     mut s: Vec<(A, B)>,
     mut f: impl FnMut(Vec<B>) -> B,
@@ -37,11 +43,11 @@ fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
 }
 
 fn simplify(exprs: &mut ExprSet, s: SymRes) -> SymRes {
-    let s = group_by_first(s, |args| exprs.mk_or(args));
-    let s = group_by_first(s.into_iter().map(|(a, b)| (b, a)).collect(), |args| {
-        exprs.mk_byte_set_or(&args)
-    });
-    s.into_iter().map(|(a, b)| (b, a)).collect()
+    let mut s = group_by_first(s, |args| exprs.mk_or(args));
+    swap_each(&mut s);
+    let mut s = group_by_first(s, |args| exprs.mk_byte_set_or(&args));
+    swap_each(&mut s);
+    s
 }
 
 impl RelevanceCache {
