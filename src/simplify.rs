@@ -1,10 +1,17 @@
 use crate::ast::{
-    byteset_contains, byteset_set, byteset_union, Expr, ExprFlags, ExprRef, ExprSet, ExprTag,
+    byteset_clear, byteset_contains, byteset_intersection, byteset_set, byteset_union, Expr,
+    ExprFlags, ExprRef, ExprSet, ExprTag,
 };
 
 impl ExprSet {
     fn pay(&mut self, cost: usize) {
         self.cost += cost;
+    }
+
+    pub fn byte_set_from_byte(&self, b: u8) -> Vec<u32> {
+        let mut r = vec![0; self.alphabet_words];
+        byteset_set(&mut r, b as usize);
+        r
     }
 
     pub fn mk_byte(&mut self, b: u8) -> ExprRef {
@@ -51,19 +58,12 @@ impl ExprSet {
         } else if min == 1 && max == 1 {
             e
         } else {
-            let min = if self.is_nullable(e) { 0 } else { min };
-            let flags = ExprFlags::from_nullable(min == 0);
+            let e_flags = self.get_flags(e);
+            let min = if e_flags.is_nullable() { 0 } else { min };
+            let flags = ExprFlags::from_nullable_positive(min == 0, e_flags.is_positive());
             self.mk(Expr::Repeat(flags, e, min, max))
         }
     }
-
-    // pub fn mk_star(&mut self, e: ExprRef) -> ExprRef {
-    //     self.mk_repeat(e, 0, u32::MAX)
-    // }
-
-    // pub fn mk_plus(&mut self, e: ExprRef) -> ExprRef {
-    //     self.mk_repeat(e, 1, u32::MAX)
-    // }
 
     fn flatten_tag(&self, exp_tag: ExprTag, args: Vec<ExprRef>) -> Vec<ExprRef> {
         let mut i = 0;
@@ -100,6 +100,7 @@ impl ExprSet {
         let mut nullable = false;
         let mut num_bytes = 0;
         let mut num_lookahead = 0;
+        let mut positive = true;
         for idx in 0..args.len() {
             let arg = args[idx];
             if arg == prev || arg == ExprRef::NO_MATCH {
@@ -117,8 +118,12 @@ impl ExprSet {
                 }
                 _ => {}
             }
-            if !nullable && self.is_nullable(arg) {
+            let f = self.get_flags(arg);
+            if !nullable && f.is_nullable() {
                 nullable = true;
+            }
+            if positive && !f.is_positive() {
+                positive = false;
             }
             args[dp] = arg;
             dp += 1;
@@ -179,7 +184,7 @@ impl ExprSet {
         } else if args.len() == 1 {
             args[0]
         } else {
-            let flags = ExprFlags::from_nullable(nullable);
+            let flags = ExprFlags::from_nullable_positive(nullable, positive);
             if self.optimize {
                 self.or_optimized(flags, args)
             } else {
@@ -265,6 +270,65 @@ impl ExprSet {
         self.mk_concat(children)
     }
 
+    pub fn mk_byte_set_not(&mut self, x: ExprRef) -> ExprRef {
+        match self.get(x) {
+            Expr::Byte(b) => {
+                let mut r = vec![!0u32; self.alphabet_words];
+                byteset_clear(&mut r, b as usize);
+                self.mk_byte_set(&r)
+            }
+            Expr::ByteSet(bs) => self.mk_byte_set(&bs.iter().map(|v| !*v).collect::<Vec<_>>()),
+            _ => panic!(),
+        }
+    }
+
+    pub fn mk_byte_set_or(&mut self, args: &[ExprRef]) -> ExprRef {
+        let mut byteset = vec![0u32; self.alphabet_words];
+        for e in args {
+            let n = self.get(*e);
+            match n {
+                Expr::Byte(b) => {
+                    byteset_set(&mut byteset, b as usize);
+                }
+                Expr::ByteSet(s) => {
+                    byteset_union(&mut byteset, s);
+                }
+                _ => panic!(),
+            }
+        }
+        self.mk_byte_set(&byteset)
+    }
+
+    pub fn mk_byte_set_and(&mut self, x: ExprRef, y: ExprRef) -> ExprRef {
+        if x == y {
+            x
+        } else {
+            match (self.get(x), self.get(y)) {
+                (Expr::Byte(_), Expr::Byte(_)) => ExprRef::NO_MATCH,
+                (Expr::Byte(a), Expr::ByteSet(b)) => {
+                    if byteset_contains(b, a as usize) {
+                        x
+                    } else {
+                        ExprRef::NO_MATCH
+                    }
+                }
+                (Expr::ByteSet(a), Expr::Byte(b)) => {
+                    if byteset_contains(a, b as usize) {
+                        y
+                    } else {
+                        ExprRef::NO_MATCH
+                    }
+                }
+                (Expr::ByteSet(a), Expr::ByteSet(b)) => {
+                    let mut a = a.to_vec();
+                    byteset_intersection(&mut a, b);
+                    self.mk_byte_set(&a)
+                }
+                _ => panic!(),
+            }
+        }
+    }
+
     pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
         args = self.flatten_tag(ExprTag::And, args);
         self.pay(args.len());
@@ -304,7 +368,8 @@ impl ExprSet {
                 ExprRef::NO_MATCH
             }
         } else {
-            let flags = ExprFlags::from_nullable(nullable);
+            let positive = nullable; // if all branches are nullable, then it's also positive
+            let flags = ExprFlags::from_nullable_positive(nullable, positive);
             self.mk(Expr::And(flags, &args))
         }
     }
@@ -317,10 +382,22 @@ impl ExprSet {
             ExprRef::EMPTY_STRING
         } else if args.len() == 1 {
             args[0]
-        } else if args.iter().any(|&e| e == ExprRef::NO_MATCH) {
-            ExprRef::NO_MATCH
         } else {
-            let flags = ExprFlags::from_nullable(args.iter().all(|&e| self.is_nullable(e)));
+            let mut nullable = true;
+            let mut positive = true;
+            for e in args.iter() {
+                if *e == ExprRef::NO_MATCH {
+                    return ExprRef::NO_MATCH;
+                }
+                let f = self.get_flags(*e);
+                if nullable && !f.is_nullable() {
+                    nullable = false;
+                }
+                if positive && !f.is_positive() {
+                    positive = false;
+                }
+            }
+            let flags = ExprFlags::from_nullable_positive(nullable, positive);
             self.mk(Expr::Concat(flags, &args))
         }
     }
@@ -354,7 +431,8 @@ impl ExprSet {
                 Expr::Not(_, e2) => return e2,
                 _ => {}
             }
-            let flags = ExprFlags::from_nullable(!n.nullable());
+            let nullable_positive = !n.nullable();
+            let flags = ExprFlags::from_nullable_positive(nullable_positive, nullable_positive);
             self.mk(Expr::Not(flags, e))
         }
     }
@@ -365,12 +443,10 @@ impl ExprSet {
             return ExprRef::NO_MATCH;
         }
 
-        let flags = if self.is_nullable(e) {
+        let flags = self.get_flags(e);
+        if flags.is_nullable() {
             e = ExprRef::EMPTY_STRING;
-            ExprFlags::NULLABLE
-        } else {
-            ExprFlags::ZERO
-        };
+        }
         self.mk(Expr::Lookahead(flags, e, offset))
     }
 }

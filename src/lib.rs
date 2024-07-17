@@ -6,8 +6,9 @@ mod ast;
 mod bytecompress;
 mod mapper;
 mod pp;
-mod regexbuilder;
 mod regex;
+mod regexbuilder;
+mod relevance;
 mod simplify;
 mod syntax;
 
@@ -23,4 +24,5 @@ pub mod raw {
     pub use super::deriv::DerivCache;
     pub use super::hashcons::VecHashCons;
     pub use super::nextbyte::NextByteCache;
+    pub use super::relevance::RelevanceCache;
 }

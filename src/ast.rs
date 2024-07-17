@@ -51,17 +51,30 @@ pub enum Expr<'a> {
 pub struct ExprFlags(u32);
 impl ExprFlags {
     pub const NULLABLE: ExprFlags = ExprFlags(1 << 8);
+    pub const POSITIVE: ExprFlags = ExprFlags(1 << 9);
     pub const ZERO: ExprFlags = ExprFlags(0);
+
+    pub const POSITIVE_NULLABLE: ExprFlags =
+        ExprFlags(ExprFlags::POSITIVE.0 | ExprFlags::NULLABLE.0);
 
     pub fn is_nullable(&self) -> bool {
         self.0 & ExprFlags::NULLABLE.0 != 0
     }
 
-    pub fn from_nullable(nullable: bool) -> Self {
+    pub fn is_positive(&self) -> bool {
+        self.0 & ExprFlags::POSITIVE.0 != 0
+    }
+
+    pub fn from_nullable_positive(nullable: bool, positive: bool) -> Self {
         if nullable {
-            Self::NULLABLE
+            // anything nullable is also positive
+            Self::POSITIVE_NULLABLE
         } else {
-            Self::ZERO
+            if positive {
+                Self::POSITIVE
+            } else {
+                Self::ZERO
+            }
         }
     }
 
@@ -106,6 +119,11 @@ pub fn byteset_set(s: &mut [u32], b: usize) {
 }
 
 #[inline(always)]
+pub fn byteset_clear(s: &mut [u32], b: usize) {
+    s[b / 32] &= !(1 << (b % 32));
+}
+
+#[inline(always)]
 pub fn byteset_set_range(s: &mut [u32], range: RangeInclusive<u8>) {
     for elt in range {
         byteset_set(s, elt as usize);
@@ -116,6 +134,13 @@ pub fn byteset_set_range(s: &mut [u32], range: RangeInclusive<u8>) {
 pub fn byteset_union(s: &mut [u32], other: &[u32]) {
     for i in 0..s.len() {
         s[i] |= other[i];
+    }
+}
+
+#[inline(always)]
+pub fn byteset_intersection(s: &mut [u32], other: &[u32]) {
+    for i in 0..s.len() {
+        s[i] &= other[i];
     }
 }
 
@@ -150,10 +175,12 @@ impl<'a> Expr<'a> {
         }
     }
 
+    #[inline]
     fn get_flags(&self) -> ExprFlags {
         match self {
-            Expr::EmptyString => ExprFlags::NULLABLE,
-            Expr::NoMatch | Expr::Byte(_) | Expr::ByteSet(_) => ExprFlags::ZERO,
+            Expr::EmptyString => ExprFlags::POSITIVE_NULLABLE,
+            Expr::NoMatch => ExprFlags::ZERO,
+            Expr::Byte(_) | Expr::ByteSet(_) => ExprFlags::POSITIVE,
             Expr::Lookahead(f, _, _) => *f,
             Expr::Not(f, _) => *f,
             Expr::Repeat(f, _, _, _) => *f,
@@ -190,15 +217,15 @@ impl<'a> Expr<'a> {
             trg.push_u32(tag);
             trg.push_slice(bytemuck::cast_slice(es));
         }
-        let zf = ExprFlags::ZERO;
+        let flags = self.get_flags();
         match self {
-            Expr::EmptyString => trg.push_u32(zf.encode(ExprTag::EmptyString)),
-            Expr::NoMatch => trg.push_u32(zf.encode(ExprTag::NoMatch)),
+            Expr::EmptyString => trg.push_u32(flags.encode(ExprTag::EmptyString)),
+            Expr::NoMatch => trg.push_u32(flags.encode(ExprTag::NoMatch)),
             Expr::Byte(b) => {
-                trg.push_slice(&[zf.encode(ExprTag::Byte), *b as u32]);
+                trg.push_slice(&[flags.encode(ExprTag::Byte), *b as u32]);
             }
             Expr::ByteSet(s) => {
-                trg.push_u32(zf.encode(ExprTag::ByteSet));
+                trg.push_u32(flags.encode(ExprTag::ByteSet));
                 trg.push_slice(s);
             }
             Expr::Lookahead(flags, e, n) => {
@@ -248,21 +275,11 @@ impl ExprSet {
                 ExprRef::ANY_BYTE,
             ),
             (
-                r.mk(Expr::Repeat(
-                    ExprFlags::NULLABLE,
-                    ExprRef::ANY_BYTE,
-                    0,
-                    u32::MAX,
-                )),
+                r.mk_repeat(ExprRef::ANY_BYTE, 0, u32::MAX),
                 ExprRef::ANY_STRING,
             ),
             (
-                r.mk(Expr::Repeat(
-                    ExprFlags::ZERO,
-                    ExprRef::ANY_BYTE,
-                    1,
-                    u32::MAX,
-                )),
+                r.mk_repeat(ExprRef::ANY_BYTE, 1, u32::MAX),
                 ExprRef::NON_EMPTY_STRING,
             ),
         ];
@@ -367,11 +384,8 @@ impl ExprSet {
         }
     }
 
-    fn get_flags(&self, id: ExprRef) -> ExprFlags {
+    pub fn get_flags(&self, id: ExprRef) -> ExprFlags {
         assert!(id.is_valid());
-        if id == ExprRef::EMPTY_STRING {
-            return ExprFlags::NULLABLE;
-        }
         ExprFlags(self.exprs.get(id.0)[0] & !0xff)
     }
 
