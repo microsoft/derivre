@@ -147,6 +147,7 @@ impl RelevanceCache {
                         simplify(exprs, or_branches)
                     }
                 };
+                exprs.pay(r.len());
                 debug!(
                     "deriv: {:?} -> {:?}",
                     exprs.expr_to_string(e),
@@ -167,8 +168,7 @@ impl RelevanceCache {
             return *r;
         }
 
-        // TODO limit by size somehow...
-
+        // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
         let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
         let mut pending = HashSet::new();
         let mut front_wave = vec![top_expr];
@@ -180,14 +180,14 @@ impl RelevanceCache {
             for e in &front_wave {
                 for (_, r) in self.deriv(exprs, *e) {
                     if exprs.is_positive(r) {
-                        let mut relevant_todo = vec![*e];
-                        while let Some(e) = relevant_todo.pop() {
+                        let mut mark_relevant = vec![*e];
+                        while let Some(e) = mark_relevant.pop() {
                             if self.relevance_cache.contains_key(&e) {
                                 continue;
                             }
                             self.relevance_cache.insert(e, true);
                             if let Some(lst) = makes_relevant.get(&e) {
-                                relevant_todo.extend_from_slice(lst);
+                                mark_relevant.extend_from_slice(lst);
                             }
                         }
                         assert!(self.relevance_cache[&top_expr] == true);

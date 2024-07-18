@@ -4,7 +4,7 @@ use crate::ast::{
 };
 
 impl ExprSet {
-    fn pay(&mut self, cost: usize) {
+    pub(crate) fn pay(&mut self, cost: usize) {
         self.cost += cost;
     }
 
