@@ -7,6 +7,16 @@ use crate::ast::{Expr, ExprRef, ExprSet};
 // Conditions can be overlapping, but should not repeat.
 type SymRes = Vec<(ExprRef, ExprRef)>;
 
+const DEBUG: bool = false;
+macro_rules! debug {
+    ($($arg:tt)*) => {
+        if DEBUG {
+            eprint!("  ");
+            eprintln!($($arg)*);
+        }
+    };
+}
+
 #[derive(Clone)]
 pub struct RelevanceCache {
     relevance_cache: HashMap<ExprRef, bool>,
@@ -67,74 +77,84 @@ impl RelevanceCache {
             e,
             &mut self.sym_deriv,
             |e| e,
-            |exprs, mut deriv, e| match exprs.get(e) {
-                Expr::EmptyString => vec![],
-                Expr::NoMatch => vec![],
-                Expr::Byte(_) => vec![(e, ExprRef::EMPTY_STRING)],
-                Expr::ByteSet(_) => vec![(e, ExprRef::EMPTY_STRING)],
+            |exprs, mut deriv, e| {
+                let r = match exprs.get(e) {
+                    Expr::EmptyString => vec![],
+                    Expr::NoMatch => vec![],
+                    Expr::Byte(_) => vec![(e, ExprRef::EMPTY_STRING)],
+                    Expr::ByteSet(_) => vec![(e, ExprRef::EMPTY_STRING)],
 
-                // just unwrap lookaheads
-                Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
+                    // just unwrap lookaheads
+                    Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
 
-                Expr::And(_, _) => {
-                    let mut acc = deriv.pop().unwrap();
-                    while let Some(other) = deriv.pop() {
-                        let mut new_acc = vec![];
-                        for (b0, r0) in &acc {
-                            for (b1, r1) in &other {
-                                let b = exprs.mk_byte_set_and(*b0, *b1);
-                                if b != ExprRef::NO_MATCH {
-                                    let r = exprs.mk_and(vec![*r0, *r1]);
-                                    if r != ExprRef::NO_MATCH {
-                                        new_acc.push((b, r));
+                    Expr::And(_, _) => {
+                        let mut acc = deriv.pop().unwrap();
+                        while let Some(other) = deriv.pop() {
+                            let mut new_acc = vec![];
+                            for (b0, r0) in &acc {
+                                for (b1, r1) in &other {
+                                    let b = exprs.mk_byte_set_and(*b0, *b1);
+                                    if b != ExprRef::NO_MATCH {
+                                        let r = exprs.mk_and(vec![*r0, *r1]);
+                                        if r != ExprRef::NO_MATCH {
+                                            new_acc.push((b, r));
+                                        }
                                     }
                                 }
                             }
+                            acc = new_acc;
                         }
-                        acc = new_acc;
+                        simplify(exprs, acc)
                     }
-                    simplify(exprs, acc)
-                }
 
-                Expr::Or(_, _) => simplify(exprs, deriv.into_iter().flatten().collect()),
+                    Expr::Or(_, _) => simplify(exprs, deriv.into_iter().flatten().collect()),
 
-                Expr::Not(_, _) => {
-                    let tmp = deriv[0]
-                        .iter()
-                        .map(|(b, r)| (exprs.mk_byte_set_not(*b), exprs.mk_not(*r)))
-                        .collect();
-                    simplify(exprs, tmp)
-                }
+                    Expr::Not(_, _) => {
+                        let tmp = deriv[0]
+                            .iter()
+                            .map(|(b, r)| (exprs.mk_byte_set_not(*b), exprs.mk_not(*r)))
+                            .collect();
+                        simplify(exprs, tmp)
+                    }
 
-                Expr::Repeat(_, e, min, max) => {
-                    let max = if max == u32::MAX {
-                        u32::MAX
-                    } else {
-                        max.saturating_sub(1)
-                    };
-                    let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
-                    let tmp = deriv[0]
-                        .iter()
-                        .map(|(b, r)| (*b, exprs.mk_concat(vec![*r, tail])))
-                        .collect();
-                    simplify(exprs, tmp)
-                }
-                Expr::Concat(_, args) => {
-                    let mut or_branches = vec![];
-                    let args = args.to_vec();
-                    for i in 0..args.len() {
-                        let nullable = exprs.is_nullable(args[i]);
-                        or_branches.extend(deriv[i].iter().map(|(b, r)| {
-                            let mut cc = vec![*r];
-                            cc.extend_from_slice(&args[i + 1..]);
-                            (*b, exprs.mk_concat(cc))
-                        }));
-                        if nullable {
-                            break;
+                    Expr::Repeat(_, e, min, max) => {
+                        let max = if max == u32::MAX {
+                            u32::MAX
+                        } else {
+                            max.saturating_sub(1)
+                        };
+                        let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
+                        let tmp = deriv[0]
+                            .iter()
+                            .map(|(b, r)| (*b, exprs.mk_concat(vec![*r, tail])))
+                            .collect();
+                        simplify(exprs, tmp)
+                    }
+                    Expr::Concat(_, args) => {
+                        let mut or_branches = vec![];
+                        let args = args.to_vec();
+                        for i in 0..args.len() {
+                            let nullable = exprs.is_nullable(args[i]);
+                            or_branches.extend(deriv[i].iter().map(|(b, r)| {
+                                let mut cc = vec![*r];
+                                cc.extend_from_slice(&args[i + 1..]);
+                                (*b, exprs.mk_concat(cc))
+                            }));
+                            if !nullable {
+                                break;
+                            }
                         }
+                        simplify(exprs, or_branches)
                     }
-                    simplify(exprs, or_branches)
-                }
+                };
+                debug!(
+                    "deriv: {:?} -> {:?}",
+                    exprs.expr_to_string(e),
+                    r.iter()
+                        .map(|(b, r)| (exprs.expr_to_string(*b), exprs.expr_to_string(*r)))
+                        .collect::<Vec<_>>()
+                );
+                r
             },
         )
     }
@@ -149,30 +169,50 @@ impl RelevanceCache {
 
         // TODO limit by size somehow...
 
+        let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
         let mut pending = HashSet::new();
         let mut front_wave = vec![top_expr];
         pending.insert(top_expr);
 
         loop {
-            let mut d = vec![];
+            debug!("wave: {:?}", front_wave);
+            let mut new_wave = vec![];
             for e in &front_wave {
-                d.extend_from_slice(&self.deriv(exprs, *e));
-            }
-
-            front_wave.clear();
-            for (_, r) in &d {
-                if !pending.contains(r) {
-                    if exprs.is_positive(*r) {
-                        self.relevance_cache.insert(top_expr, true);
+                for (_, r) in self.deriv(exprs, *e) {
+                    if exprs.is_positive(r) {
+                        let mut relevant_todo = vec![*e];
+                        while let Some(e) = relevant_todo.pop() {
+                            if self.relevance_cache.contains_key(&e) {
+                                continue;
+                            }
+                            self.relevance_cache.insert(e, true);
+                            if let Some(lst) = makes_relevant.get(&e) {
+                                relevant_todo.extend_from_slice(lst);
+                            }
+                        }
+                        assert!(self.relevance_cache[&top_expr] == true);
+                        debug!("relevant: {:?}", top_expr);
                         return true;
                     }
-                    pending.insert(*r);
-                    front_wave.push(*r);
+
+                    makes_relevant.entry(r).or_insert_with(Vec::new).push(*e);
+
+                    if !pending.contains(&r) {
+                        debug!("  add: {:?}", r);
+                        pending.insert(r);
+                        new_wave.push(r);
+                    }
                 }
             }
 
+            front_wave = new_wave;
+
             if front_wave.is_empty() {
-                self.relevance_cache.insert(top_expr, false);
+                debug!("irrelevant: {:?}", top_expr);
+                for e in pending {
+                    self.relevance_cache.insert(e, false);
+                }
+                assert!(self.relevance_cache[&top_expr] == false);
                 return false;
             }
         }

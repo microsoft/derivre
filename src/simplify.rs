@@ -100,7 +100,7 @@ impl ExprSet {
         let mut nullable = false;
         let mut num_bytes = 0;
         let mut num_lookahead = 0;
-        let mut positive = true;
+        let mut positive = false;
         for idx in 0..args.len() {
             let arg = args[idx];
             if arg == prev || arg == ExprRef::NO_MATCH {
@@ -122,8 +122,8 @@ impl ExprSet {
             if !nullable && f.is_nullable() {
                 nullable = true;
             }
-            if positive && !f.is_positive() {
-                positive = false;
+            if !positive && f.is_positive() {
+                positive = true;
             }
             args[dp] = arg;
             dp += 1;
@@ -299,22 +299,22 @@ impl ExprSet {
         self.mk_byte_set(&byteset)
     }
 
-    pub fn mk_byte_set_and(&mut self, x: ExprRef, y: ExprRef) -> ExprRef {
-        if x == y {
-            x
+    pub fn mk_byte_set_and(&mut self, aa: ExprRef, bb: ExprRef) -> ExprRef {
+        if aa == bb {
+            aa
         } else {
-            match (self.get(x), self.get(y)) {
+            match (self.get(aa), self.get(bb)) {
                 (Expr::Byte(_), Expr::Byte(_)) => ExprRef::NO_MATCH,
                 (Expr::Byte(a), Expr::ByteSet(b)) => {
                     if byteset_contains(b, a as usize) {
-                        x
+                        aa
                     } else {
                         ExprRef::NO_MATCH
                     }
                 }
                 (Expr::ByteSet(a), Expr::Byte(b)) => {
                     if byteset_contains(a, b as usize) {
-                        y
+                        bb
                     } else {
                         ExprRef::NO_MATCH
                     }

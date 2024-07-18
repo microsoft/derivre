@@ -21,6 +21,7 @@ anchored = true
 /// Each `RegexTest` represents a single `[[test]]` table in a TOML test file.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[allow(dead_code)]
 pub struct RegexTest {
     #[serde(skip)]
     group: String,
