@@ -9,6 +9,7 @@ use crate::{
     hashcons::VecHashCons,
     nextbyte::NextByteCache,
     pp::PrettyPrinter,
+    relevance::RelevanceCache,
 };
 
 const DEBUG: bool = false;
@@ -85,6 +86,7 @@ pub struct Regex {
     exprs: ExprSet,
     deriv: DerivCache,
     next_byte: NextByteCache,
+    relevance: RelevanceCache,
     alpha: AlphabetInfo,
     initial: StateID,
     rx_sets: VecHashCons,
@@ -371,6 +373,7 @@ impl Regex {
         let mut r = Regex {
             deriv: DerivCache::new(),
             next_byte: NextByteCache::new(),
+            relevance: RelevanceCache::new(),
             exprs: exprset,
             alpha,
             rx_sets,
@@ -394,7 +397,11 @@ impl Regex {
         // in fact, transition from MISSING and DEAD should both lead to DEAD
         r.state_table.fill(StateID::DEAD);
 
-        r.initial = r.insert_state(top_rx);
+        if r.relevance.is_relevant(&mut r.exprs, top_rx) {
+            r.initial = r.insert_state(top_rx);
+        } else {
+            r.initial = StateID::DEAD;
+        }
 
         assert!(r.alpha.len() > 0);
         r
@@ -425,7 +432,11 @@ impl Regex {
         if d == ExprRef::NO_MATCH {
             StateID::DEAD
         } else {
-            self.insert_state(d)
+            if self.relevance.is_relevant(&mut self.exprs, d) {
+                self.insert_state(d)
+            } else {
+                StateID::DEAD
+            }
         }
     }
 }

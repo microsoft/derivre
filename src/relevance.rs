@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Expr, ExprRef, ExprSet};
 
@@ -73,7 +73,7 @@ impl RelevanceCache {
                 Expr::Byte(_) => vec![(e, ExprRef::EMPTY_STRING)],
                 Expr::ByteSet(_) => vec![(e, ExprRef::EMPTY_STRING)],
 
-                // ignore lookaheads
+                // just unwrap lookaheads
                 Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
 
                 Expr::And(_, _) => {
@@ -139,58 +139,42 @@ impl RelevanceCache {
         )
     }
 
-    pub fn is_relevant(&mut self, exprs: &mut ExprSet, e: ExprRef) -> bool {
-        let flags = exprs.get_flags(e);
-        if flags.is_positive() {
+    pub fn is_relevant(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> bool {
+        if exprs.is_positive(top_expr) {
             return true;
         }
-        if let Some(r) = self.relevance_cache.get(&e) {
+        if let Some(r) = self.relevance_cache.get(&top_expr) {
             return *r;
         }
 
         // TODO limit by size somehow...
 
-        let d = self.deriv(exprs, e);
-        if d.iter().any(|(_, e)| exprs.is_nullable(*e)) {
-            self.relevance_cache.insert(e, true);
-            true
-        } else if d.is_empty() {
-            self.relevance_cache.insert(e, false);
-            false
-        } else {
-            todo!("BFS")
+        let mut pending = HashSet::new();
+        let mut front_wave = vec![top_expr];
+        pending.insert(top_expr);
+
+        loop {
+            let mut d = vec![];
+            for e in &front_wave {
+                d.extend_from_slice(&self.deriv(exprs, *e));
+            }
+
+            front_wave.clear();
+            for (_, r) in &d {
+                if !pending.contains(r) {
+                    if exprs.is_positive(*r) {
+                        self.relevance_cache.insert(top_expr, true);
+                        return true;
+                    }
+                    pending.insert(*r);
+                    front_wave.push(*r);
+                }
+            }
+
+            if front_wave.is_empty() {
+                self.relevance_cache.insert(top_expr, false);
+                return false;
+            }
         }
     }
 }
-
-/*
-
-ite(a,E,bot) | ite(b,E,bot)
-
-ite(a,E | ite(b, E, bot),bot | ite(b, E, bot))
-
-ite(a, ite(b, E | E, E | bot), ite(b, bot|E,bot|bot))
-ite(a, ite(b, E, E), ite(b, E,bot))
-ite(a,  E, ite(b, E,bot))
-
-no ITE or ITE at the top
-bunch of ITEs
-
-c0 => r0
-c1 => r1
-...
-
-a=>A,b=>B & c=>C,d=>D ==>
-a&c=>A&C, ...
-
-a=>A,b=>B | c=>C,d=>D ==>
-a=>A,b=>B , c=>C,d=>D
-
-~ (a=>A, b=>B) ==>
-~a=>~A, ~b=>~B
-
-a=>A,b=>B . c=>C,d=>D ==>
-
-
-
-*/

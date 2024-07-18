@@ -7,7 +7,7 @@ use crate::{
     ast::ExprSet,
     mapper::map_ast,
     pp::{byte_to_string, byteset_to_string},
-    ExprRef,
+    ExprRef, Regex,
 };
 
 #[derive(Clone)]
@@ -157,6 +157,10 @@ impl RegexBuilder {
             parser_builder: ParserBuilder::new(),
             exprset: ExprSet::new(256),
         }
+    }
+
+    pub fn to_regex(&self, r: ExprRef) -> Regex {
+        Regex::new_with_exprset(&self.exprset, r)
     }
 
     pub fn exprset(&self) -> &ExprSet {

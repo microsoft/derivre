@@ -409,6 +409,10 @@ impl ExprSet {
         self.get_flags(id).is_nullable()
     }
 
+    pub fn is_positive(&self, id: ExprRef) -> bool {
+        self.get_flags(id).is_positive()
+    }
+
     #[inline(always)]
     pub fn map<K: Eq + PartialEq + Hash, V: Clone>(
         &mut self,
