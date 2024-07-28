@@ -340,6 +340,7 @@ impl AlphabetInfo {
         (alpha, exprset, rx_list.to_vec())
     }
 
+    #[inline(always)]
     pub fn map(&self, b: u8) -> usize {
         self.mapping[b as usize] as usize
     }
