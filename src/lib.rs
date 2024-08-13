@@ -15,7 +15,7 @@ mod syntax;
 pub use ast::{ExprRef, NextByte};
 pub use regex::{AlphabetInfo, Regex, StateID};
 
-pub use regexbuilder::{RegexAst, RegexBuilder};
+pub use regexbuilder::{RegexAst, RegexBuilder, JsonQuoteOptions};
 
 pub use mapper::map_ast; // utility function
 

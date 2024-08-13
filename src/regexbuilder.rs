@@ -19,6 +19,11 @@ pub struct RegexBuilder {
     exprset: ExprSet,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct JsonQuoteOptions {
+    pub allow_unicode_escapes: bool,
+}
+
 #[derive(Clone)]
 pub enum RegexAst {
     /// Intersection of the regexes
@@ -170,7 +175,7 @@ impl RegexBuilder {
         &self.exprset
     }
 
-    pub fn json_quote(&mut self, e: ExprRef) -> Result<ExprRef> {
+    pub fn json_quote(&mut self, e: ExprRef, options: &JsonQuoteOptions) -> Result<ExprRef> {
         // returns Some(X) iff b should quoted as \X
         fn quote(b: u8) -> Option<u8> {
             match b {
@@ -211,11 +216,17 @@ impl RegexBuilder {
         }
 
         // all control characters, including \n or not
-        fn quote_all_ctrl(exprset: &mut ExprSet, include_nl: bool) -> ExprRef {
+        fn quote_all_ctrl(
+            exprset: &mut ExprSet,
+            include_nl: bool,
+            options: &JsonQuoteOptions,
+        ) -> ExprRef {
             let upref = exprset.mk_literal("u00");
             let backslash = exprset.mk_byte(b'\\');
             let single_quote = exprset.mk_byte_set(&single_quote_byteset(include_nl));
-            let u0000 = if include_nl {
+            let u0000 = if !options.allow_unicode_escapes {
+                ExprRef::NO_MATCH
+            } else if include_nl {
                 let hex0 = exprset.mk_byte_set(&byteset_from_range(b'0', b'1'));
                 let hex1 = exprset.mk_byte_set(&hex_byteset(include_nl));
                 exprset.mk_concat(vec![upref, hex0, hex1])
@@ -234,16 +245,20 @@ impl RegexBuilder {
             exprset.mk_concat(vec![backslash, u_or_single])
         }
 
-        fn quote_byteset(exprset: &mut ExprSet, bs: Vec<u32>) -> ExprRef {
+        fn quote_byteset(
+            exprset: &mut ExprSet,
+            bs: Vec<u32>,
+            options: &JsonQuoteOptions,
+        ) -> ExprRef {
             let upref = exprset.mk_literal("u00");
             let backslash = exprset.mk_byte(b'\\');
 
             let quoted = if bs[0] == 0xffff_ffff & !(1 << 10) {
                 // everything except for \n
-                quote_all_ctrl(exprset, false)
+                quote_all_ctrl(exprset, false, options)
             } else if bs[0] == 0xffff_ffff {
                 // everything
-                quote_all_ctrl(exprset, true)
+                quote_all_ctrl(exprset, true, options)
             } else {
                 let mut quoted_bs = byteset_256();
                 let mut other_bytes = vec![];
@@ -252,10 +267,12 @@ impl RegexBuilder {
                         if let Some(q) = quote(b as u8) {
                             byteset_set(&mut quoted_bs, q as usize);
                         }
-                        let other = exprset.mk_literal(&format!("{:02x}", b));
-                        other_bytes.push(other);
-                        let other = exprset.mk_literal(&format!("{:02X}", b));
-                        other_bytes.push(other);
+                        if options.allow_unicode_escapes {
+                            let other = exprset.mk_literal(&format!("{:02x}", b));
+                            other_bytes.push(other);
+                            let other = exprset.mk_literal(&format!("{:02X}", b));
+                            other_bytes.push(other);
+                        }
                     }
                 }
 
@@ -299,12 +316,12 @@ impl RegexBuilder {
                     {
                         exprset.mk_byte_set(&bs)
                     } else {
-                        quote_byteset(exprset, bs)
+                        quote_byteset(exprset, bs, &options)
                     }
                 }
                 Expr::Byte(b) => {
                     if b < 0x20 {
-                        quote_byteset(exprset, byteset_from_range(b, b))
+                        quote_byteset(exprset, byteset_from_range(b, b), &options)
                     } else {
                         exprset.mk_byte(b)
                     }
