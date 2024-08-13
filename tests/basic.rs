@@ -304,7 +304,7 @@ fn check_one_quote(rx: &str, options: &JsonQuoteOptions, allow_nl: bool) -> Rege
     ];
     let valid_any_string_unicode = &["\\u001A", "\\u001a", "\\u0000", "\\u0001", "\\u0008"];
     let invalid_any_string = &["\n", "\t", "\"", "\\", "\\'", "aa"];
-    let string_allowing_nl = if options.allow_unicode_escapes {
+    let string_allowing_nl = if options.is_allowed(b'u') {
         &["\\n", "\\u000A", "\\u000a"]
     } else {
         &["\\n", "\\n", "\\n"]
@@ -319,7 +319,7 @@ fn check_one_quote(rx: &str, options: &JsonQuoteOptions, allow_nl: bool) -> Rege
     let mut rx = b.to_regex(e);
     match_many(&mut rx, valid_any_string);
     no_match_many(&mut rx, invalid_any_string);
-    if options.allow_unicode_escapes {
+    if options.is_allowed(b'u') {
         match_many(&mut rx, valid_any_string_unicode);
     } else {
         no_match_many(&mut rx, valid_any_string_unicode);
@@ -337,11 +337,10 @@ fn check_one_quote(rx: &str, options: &JsonQuoteOptions, allow_nl: bool) -> Rege
 fn test_json_quote() {
     let mut b = RegexBuilder::new();
 
-    for allow in [true, false] {
-        let options = JsonQuoteOptions {
-            allow_unicode_escapes: allow,
-        };
-
+    for options in [
+        JsonQuoteOptions::no_unicode(),
+        JsonQuoteOptions::with_unicode(),
+    ] {
         let e = b.mk_regex(r#"[abc"]"#).unwrap();
         let e = b.json_quote(e, &options).unwrap();
 

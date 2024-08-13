@@ -19,9 +19,58 @@ pub struct RegexBuilder {
     exprset: ExprSet,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct JsonQuoteOptions {
-    pub allow_unicode_escapes: bool,
+    /// Which escapes to allow (after \).
+    /// Represents a set of bytes. Allowed bytes:
+    /// n, r, b, t, f, \, ", u
+    pub allowed_escapes: String,
+}
+
+impl Default for JsonQuoteOptions {
+    fn default() -> Self {
+        Self::simple()
+    }
+}
+
+impl JsonQuoteOptions {
+    pub fn bare() -> Self {
+        Self {
+            // only \n, \", \\ - probably best match for training data
+            allowed_escapes: "n\\\"".to_string(),
+        }
+    }
+
+    pub fn simple() -> Self {
+        Self {
+            // \uXXXX, \f, \b not allowed
+            allowed_escapes: "nrt\\\"".to_string(),
+        }
+    }
+
+    pub fn no_unicode() -> Self {
+        Self {
+            // \uXXXX not allowed
+            allowed_escapes: "nrbtf\\\"".to_string(),
+        }
+    }
+
+    pub fn with_unicode() -> Self {
+        Self {
+            // allow \uXXXX
+            allowed_escapes: "nrbtf\\\"u".to_string(),
+        }
+    }
+
+    pub fn is_allowed(&self, b: u8) -> bool {
+        self.allowed_escapes.as_bytes().contains(&b)
+    }
+
+    pub fn set_if_allowed(&self, bs: &mut [u32], b: u8) {
+        if self.is_allowed(b) {
+            byteset_set(bs, b as usize);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -191,13 +240,13 @@ impl RegexBuilder {
         }
 
         // byteset of all possible single-char quotes
-        fn single_quote_byteset(include_nl: bool) -> Vec<u32> {
+        fn single_quote_byteset(include_nl: bool, options: &JsonQuoteOptions) -> Vec<u32> {
             let mut quoted_bs = byteset_256();
             for c in b"\"\\bfrt" {
-                byteset_set(&mut quoted_bs, *c as usize);
+                options.set_if_allowed(&mut quoted_bs, *c);
             }
             if include_nl {
-                byteset_set(&mut quoted_bs, b'n' as usize);
+                options.set_if_allowed(&mut quoted_bs, b'n');
             }
             quoted_bs
         }
@@ -223,8 +272,8 @@ impl RegexBuilder {
         ) -> ExprRef {
             let upref = exprset.mk_literal("u00");
             let backslash = exprset.mk_byte(b'\\');
-            let single_quote = exprset.mk_byte_set(&single_quote_byteset(include_nl));
-            let u0000 = if !options.allow_unicode_escapes {
+            let single_quote = exprset.mk_byte_set(&single_quote_byteset(include_nl, options));
+            let u0000 = if !options.is_allowed(b'u') {
                 ExprRef::NO_MATCH
             } else if include_nl {
                 let hex0 = exprset.mk_byte_set(&byteset_from_range(b'0', b'1'));
@@ -265,9 +314,9 @@ impl RegexBuilder {
                 for b in 0..32 {
                     if byteset_contains(&bs, b) {
                         if let Some(q) = quote(b as u8) {
-                            byteset_set(&mut quoted_bs, q as usize);
+                            options.set_if_allowed(&mut quoted_bs, q);
                         }
-                        if options.allow_unicode_escapes {
+                        if options.is_allowed(b'u') {
                             let other = exprset.mk_literal(&format!("{:02x}", b));
                             other_bytes.push(other);
                             let other = exprset.mk_literal(&format!("{:02X}", b));
@@ -288,11 +337,15 @@ impl RegexBuilder {
             bs_without_ctrl[0] = 0;
             let mut alts = vec![quoted];
             if byteset_contains(&bs_without_ctrl, b'\\' as usize) {
-                alts.push(exprset.mk_literal("\\\\"));
+                if options.is_allowed(b'\\') {
+                    alts.push(exprset.mk_literal("\\\\"));
+                }
                 byteset_clear(&mut bs_without_ctrl, b'\\' as usize);
             }
             if byteset_contains(&bs_without_ctrl, b'"' as usize) {
-                alts.push(exprset.mk_literal("\\\""));
+                if options.is_allowed(b'"') {
+                    alts.push(exprset.mk_literal("\\\""));
+                }
                 byteset_clear(&mut bs_without_ctrl, b'"' as usize);
             }
             let bs_without_ctrl = exprset.mk_byte_set(&bs_without_ctrl);
