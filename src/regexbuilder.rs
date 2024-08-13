@@ -25,33 +25,17 @@ pub struct JsonQuoteOptions {
     /// Represents a set of bytes. Allowed bytes:
     /// n, r, b, t, f, \, ", u
     pub allowed_escapes: String,
-}
 
-impl Default for JsonQuoteOptions {
-    fn default() -> Self {
-        Self::simple()
-    }
+    /// When set, "..." will not be added around the final regular expression.
+    pub raw_mode: bool,
 }
 
 impl JsonQuoteOptions {
-    pub fn bare() -> Self {
-        Self {
-            // only \n, \", \\ - probably best match for training data
-            allowed_escapes: "n\\\"".to_string(),
-        }
-    }
-
-    pub fn simple() -> Self {
-        Self {
-            // \uXXXX, \f, \b not allowed
-            allowed_escapes: "nrt\\\"".to_string(),
-        }
-    }
-
     pub fn no_unicode() -> Self {
         Self {
             // \uXXXX not allowed
             allowed_escapes: "nrbtf\\\"".to_string(),
+            raw_mode: true,
         }
     }
 
@@ -59,6 +43,7 @@ impl JsonQuoteOptions {
         Self {
             // allow \uXXXX
             allowed_escapes: "nrbtf\\\"u".to_string(),
+            raw_mode: true,
         }
     }
 
@@ -353,6 +338,14 @@ impl RegexBuilder {
             exprset.mk_or(alts)
         }
 
+        for c in options.allowed_escapes.as_bytes() {
+            ensure!(
+                b"\"\\bfnrtu".contains(c),
+                "invalid escape character in allowed_escapes: {}",
+                *c as char
+            );
+        }
+
         let mut error = "";
 
         let r = self.exprset.simple_map(e, |exprset, args, e| -> ExprRef {
@@ -399,6 +392,12 @@ impl RegexBuilder {
         });
 
         if error.is_empty() {
+            let q = self.exprset.mk_byte(b'"');
+            let r = if options.raw_mode {
+                r
+            } else {
+                self.exprset.mk_concat(vec![q, r, q])
+            };
             Ok(r)
         } else {
             Err(anyhow::anyhow!(
