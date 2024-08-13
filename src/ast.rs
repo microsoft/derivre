@@ -414,10 +414,22 @@ impl ExprSet {
     }
 
     #[inline(always)]
+    pub fn simple_map<V: Clone>(
+        &mut self,
+        r: ExprRef,
+        process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,
+    ) -> V {
+        let mut cache = std::collections::HashMap::new();
+        let concat_nullable_check = false;
+        self.map(r, &mut cache, concat_nullable_check, |e| e, process)
+    }
+
+    #[inline(always)]
     pub fn map<K: Eq + PartialEq + Hash, V: Clone>(
         &mut self,
         r: ExprRef,
         cache: &mut std::collections::HashMap<K, V>,
+        concat_nullable_check: bool,
         mk_key: impl Fn(ExprRef) -> K,
         mut process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,
     ) -> V {
@@ -434,7 +446,7 @@ impl ExprSet {
                 continue;
             }
             let e = self.get(r);
-            let is_concat = matches!(e, Expr::Concat(_, _));
+            let is_concat = concat_nullable_check && matches!(e, Expr::Concat(_, _));
             let todo_len = todo.len();
             let eargs = e.args();
             let mut mapped = Vec::with_capacity(eargs.len());

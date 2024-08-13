@@ -1,10 +1,13 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, vec};
 
 use anyhow::{ensure, Result};
 use regex_syntax::ParserBuilder;
 
 use crate::{
-    ast::ExprSet,
+    ast::{
+        byteset_256, byteset_clear, byteset_contains, byteset_from_range, byteset_set, Expr,
+        ExprSet,
+    },
     mapper::map_ast,
     pp::{byte_to_string, byteset_to_string},
     ExprRef, Regex,
@@ -165,6 +168,174 @@ impl RegexBuilder {
 
     pub fn exprset(&self) -> &ExprSet {
         &self.exprset
+    }
+
+    pub fn json_quote(&mut self, e: ExprRef) -> Result<ExprRef> {
+        // returns Some(X) iff b should quoted as \X
+        fn quote(b: u8) -> Option<u8> {
+            match b {
+                b'\\' => Some(b'\\'),
+                b'"' => Some(b'"'),
+                0x08 => Some(b'b'),
+                0x0C => Some(b'f'),
+                b'\n' => Some(b'n'),
+                b'\r' => Some(b'r'),
+                b'\t' => Some(b't'),
+                _ => None,
+            }
+        }
+
+        // byteset of all possible single-char quotes
+        fn single_quote_byteset(include_nl: bool) -> Vec<u32> {
+            let mut quoted_bs = byteset_256();
+            for c in b"\"\\bfrt" {
+                byteset_set(&mut quoted_bs, *c as usize);
+            }
+            if include_nl {
+                byteset_set(&mut quoted_bs, b'n' as usize);
+            }
+            quoted_bs
+        }
+
+        // all hex digits, including A or not
+        fn hex_byteset(include_nl: bool) -> Vec<u32> {
+            let mut hex_bs = byteset_256();
+            for c in b"0123456789bcdefBCDEF" {
+                byteset_set(&mut hex_bs, *c as usize);
+            }
+            if include_nl {
+                byteset_set(&mut hex_bs, b'A' as usize);
+                byteset_set(&mut hex_bs, b'a' as usize);
+            }
+            hex_bs
+        }
+
+        // all control characters, including \n or not
+        fn quote_all_ctrl(exprset: &mut ExprSet, include_nl: bool) -> ExprRef {
+            let upref = exprset.mk_literal("u00");
+            let backslash = exprset.mk_byte(b'\\');
+            let single_quote = exprset.mk_byte_set(&single_quote_byteset(include_nl));
+            let u0000 = if include_nl {
+                let hex0 = exprset.mk_byte_set(&byteset_from_range(b'0', b'1'));
+                let hex1 = exprset.mk_byte_set(&hex_byteset(include_nl));
+                exprset.mk_concat(vec![upref, hex0, hex1])
+            } else {
+                let n0 = exprset.mk_byte(b'0');
+                let n1 = exprset.mk_byte(b'1');
+                let hex0 = exprset.mk_byte_set(&hex_byteset(false));
+                let hex0 = exprset.mk_concat(vec![n0, hex0]);
+                let hex1 = exprset.mk_byte_set(&hex_byteset(true));
+                let hex1 = exprset.mk_concat(vec![n1, hex1]);
+                let hex01 = exprset.mk_or(vec![hex0, hex1]);
+                exprset.mk_concat(vec![upref, hex01])
+            };
+
+            let u_or_single = exprset.mk_or(vec![u0000, single_quote]);
+            exprset.mk_concat(vec![backslash, u_or_single])
+        }
+
+        fn quote_byteset(exprset: &mut ExprSet, bs: Vec<u32>) -> ExprRef {
+            let upref = exprset.mk_literal("u00");
+            let backslash = exprset.mk_byte(b'\\');
+
+            let quoted = if bs[0] == 0xffff_ffff & !(1 << 10) {
+                // everything except for \n
+                quote_all_ctrl(exprset, false)
+            } else if bs[0] == 0xffff_ffff {
+                // everything
+                quote_all_ctrl(exprset, true)
+            } else {
+                let mut quoted_bs = byteset_256();
+                let mut other_bytes = vec![];
+                for b in 0..32 {
+                    if byteset_contains(&bs, b) {
+                        if let Some(q) = quote(b as u8) {
+                            byteset_set(&mut quoted_bs, q as usize);
+                        }
+                        let other = exprset.mk_literal(&format!("{:02x}", b));
+                        other_bytes.push(other);
+                        let other = exprset.mk_literal(&format!("{:02X}", b));
+                        other_bytes.push(other);
+                    }
+                }
+
+                let quoted_bs = exprset.mk_byte_set(&quoted_bs);
+                let other_bytes = exprset.mk_or(other_bytes);
+                let other_bytes = exprset.mk_concat(vec![upref, other_bytes]);
+
+                let quoted_or_other = exprset.mk_or(vec![quoted_bs, other_bytes]);
+                exprset.mk_concat(vec![backslash, quoted_or_other])
+            };
+
+            let mut bs_without_ctrl = bs;
+            bs_without_ctrl[0] = 0;
+            let mut alts = vec![quoted];
+            if byteset_contains(&bs_without_ctrl, b'\\' as usize) {
+                alts.push(exprset.mk_literal("\\\\"));
+                byteset_clear(&mut bs_without_ctrl, b'\\' as usize);
+            }
+            if byteset_contains(&bs_without_ctrl, b'"' as usize) {
+                alts.push(exprset.mk_literal("\\\""));
+                byteset_clear(&mut bs_without_ctrl, b'"' as usize);
+            }
+            let bs_without_ctrl = exprset.mk_byte_set(&bs_without_ctrl);
+            alts.push(bs_without_ctrl);
+            exprset.mk_or(alts)
+        }
+
+        let mut error = "";
+
+        let r = self.exprset.simple_map(e, |exprset, args, e| -> ExprRef {
+            match exprset.get(e) {
+                Expr::EmptyString => ExprRef::EMPTY_STRING,
+                Expr::NoMatch => ExprRef::NO_MATCH,
+                Expr::ByteSet(bs) => {
+                    // if the range doesn't allow any of the characters below 0x20,
+                    // we don't need to quote
+                    let bs = bs.to_vec();
+                    if bs[0] == 0
+                        && !byteset_contains(&bs, b'\\' as usize)
+                        && !byteset_contains(&bs, b'"' as usize)
+                    {
+                        exprset.mk_byte_set(&bs)
+                    } else {
+                        quote_byteset(exprset, bs)
+                    }
+                }
+                Expr::Byte(b) => {
+                    if b < 0x20 {
+                        quote_byteset(exprset, byteset_from_range(b, b))
+                    } else {
+                        exprset.mk_byte(b)
+                    }
+                }
+                Expr::And(_, _) => {
+                    if error.is_empty() {
+                        error = "and";
+                    }
+                    exprset.mk_and(args)
+                }
+                Expr::Or(_, _) => exprset.mk_or(args),
+                Expr::Concat(_, _) => exprset.mk_concat(args),
+                Expr::Not(_, _) => {
+                    if error.is_empty() {
+                        error = "not";
+                    }
+                    exprset.mk_not(args[0])
+                }
+                Expr::Lookahead(_, _, _) => exprset.mk_lookahead(args[0], 0),
+                Expr::Repeat(_, _, min, max) => exprset.mk_repeat(args[0], min, max),
+            }
+        });
+
+        if error.is_empty() {
+            Ok(r)
+        } else {
+            Err(anyhow::anyhow!(
+                "unsupported node when JSON-quoting: {}",
+                error
+            ))
+        }
     }
 
     pub fn mk_regex(&mut self, s: &str) -> Result<ExprRef> {

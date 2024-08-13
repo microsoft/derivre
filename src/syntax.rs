@@ -5,8 +5,6 @@ use regex_syntax::{
     Parser,
 };
 
-// TODO possibly use Utf8Sequences from regex-syntax crate
-
 use crate::{
     ast::{byteset_256, byteset_from_range, byteset_set, ExprSet},
     ExprRef,

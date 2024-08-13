@@ -30,6 +30,7 @@ impl DerivCache {
         exprs.map(
             r,
             &mut self.state_table,
+            true,
             |r| (r, b),
             |exprs, deriv, r| {
                 let e = exprs.get(r);

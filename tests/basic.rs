@@ -1,4 +1,4 @@
-use derivre::{NextByte, Regex};
+use derivre::{NextByte, Regex, RegexBuilder};
 
 fn check_is_match(rx: &mut Regex, s: &str, exp: bool) {
     if rx.is_match(s) == exp {
@@ -296,4 +296,52 @@ fn next_byte() {
             (NextByte::ForcedEOI, b'X'),
         ],
     );
+}
+
+#[test]
+fn test_json_quote() {
+    let mut b = RegexBuilder::new();
+    b.unicode(false).utf8(false);
+
+    let e = b.mk_regex(r#"[abc"]"#).unwrap();
+    let e = b.json_quote(e).unwrap();
+
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, &["a", "b", "c", "\\\""]);
+    no_match_many(&mut rx, &["A", "\"", "\\"]);
+
+    let valid_any_string = &[
+        "a", "A", "!", " ", "\\\"", "\\b", "\\f", "\\r", "\\t", "\\\\", "\\u001A", "\\u001a",
+        "\\u0000", "\\u0001", "\\u0008",
+    ];
+    let invalid_any_string = &["\n", "\t", "\"", "\\", "\\'", "aa"];
+    let string_allowing_nl = &["\\n", "\\u000A", "\\u000a"];
+
+    let e = b.mk_regex(r#"."#).unwrap();
+    let e = b.json_quote(e).unwrap();
+    println!("{}", b.exprset().expr_to_string(e));
+
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, valid_any_string);
+    no_match_many(&mut rx, invalid_any_string);
+    no_match_many(&mut rx, string_allowing_nl);
+
+    let e = b.mk_regex(r#".|\n"#).unwrap();
+    let e = b.json_quote(e).unwrap();
+    println!("{}", b.exprset().expr_to_string(e));
+
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, valid_any_string);
+    no_match_many(&mut rx, invalid_any_string);
+    match_many(&mut rx, string_allowing_nl);
+
+    let e = b.mk_regex(r#"[^\u0017]"#).unwrap();
+    let e = b.json_quote(e).unwrap();
+    println!("{}", b.exprset().expr_to_string(e));
+
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, valid_any_string);
+    match_many(&mut rx, string_allowing_nl);
+    no_match_many(&mut rx, invalid_any_string);
+    no_match_many(&mut rx, &["\\u0017", ]);
 }

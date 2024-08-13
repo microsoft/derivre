@@ -76,6 +76,7 @@ impl RelevanceCache {
         exprs.map(
             e,
             &mut self.sym_deriv,
+            true,
             |e| e,
             |exprs, mut deriv, e| {
                 let r = match exprs.get(e) {
