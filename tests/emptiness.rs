@@ -8,12 +8,8 @@ fn mk_and(a: &str, b: &str) -> Regex {
     bld.to_regex(r)
 }
 
-fn mk_contained_in(small: &str, big: &str) -> Regex {
-    let mut bld = RegexBuilder::new();
-    let small = RegexAst::ExprRef(bld.mk_regex(small).unwrap());
-    let big = RegexAst::ExprRef(bld.mk_regex(big).unwrap());
-    let r = bld.mk(&small.contained_in(&big)).unwrap();
-    bld.to_regex(r)
+fn is_contained_in(small: &str, big: &str) -> bool {
+    RegexBuilder::new().is_contained_in(small, big).unwrap()
 }
 
 fn check_empty(a: &str, b: &str) {
@@ -33,24 +29,20 @@ fn check_non_empty(a: &str, b: &str) {
 }
 
 fn check_contains(small: &str, big: &str) {
-    let mut r = mk_contained_in(small, big);
-    if !r.always_empty() {
+    if !is_contained_in(small, big) {
         panic!("{} is not contained in {}", small, big);
     }
 
-    let mut r = mk_contained_in(big, small);
-    if r.always_empty() {
+    if is_contained_in(big, small) {
         panic!("{} is contained in {}", big, small);
     }
 }
 
 fn check_not_contains(small: &str, big: &str) {
-    let mut r = mk_contained_in(small, big);
-    if r.always_empty() {
+    if is_contained_in(small, big) {
         panic!("{} is contained in {}", small, big);
     }
-    let mut r = mk_contained_in(big, small);
-    if r.always_empty() {
+    if is_contained_in(big, small) {
         panic!("{} is contained in {}", big, small);
     }
 }

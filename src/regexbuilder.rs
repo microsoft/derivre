@@ -418,10 +418,21 @@ impl RegexBuilder {
         self.exprset.parse_expr(parser, s)
     }
 
-    pub fn mk_contained_in(&mut self, small: &RegexAst, big: &RegexAst) -> Result<ExprRef> {
+    pub fn mk_contained_in(&mut self, small: &str, big: &str) -> Result<ExprRef> {
+        let a = RegexAst::ExprRef(self.mk_regex(&small)?);
+        let b = RegexAst::ExprRef(self.mk_regex(&big)?);
+        self.mk(&a.contained_in(&b))
+    }
+
+    pub fn mk_contained_in_ast(&mut self, small: &RegexAst, big: &RegexAst) -> Result<ExprRef> {
         let a = RegexAst::ExprRef(self.mk(&small)?);
         let b = RegexAst::ExprRef(self.mk(&big)?);
         self.mk(&a.contained_in(&b))
+    }
+
+    pub fn is_contained_in(&mut self, small: &str, big: &str) -> Result<bool> {
+        let r = self.mk_contained_in(small, big)?;
+        Ok(self.to_regex(r).always_empty())
     }
 
     pub fn mk(&mut self, ast: &RegexAst) -> Result<ExprRef> {
