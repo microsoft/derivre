@@ -27,16 +27,16 @@ pub struct StateID(u32);
 
 impl StateID {
     // DEAD state corresponds to empty vector
-    pub const DEAD: StateID = StateID(0);
+    pub const DEAD: StateID = StateID::new(0);
     // MISSING state corresponds to yet not computed entries in the state table
-    pub const MISSING: StateID = StateID(1);
+    pub const MISSING: StateID = StateID::new(1);
 
     pub fn as_usize(&self) -> usize {
-        self.0 as usize
+        (self.0 >> 1) as usize
     }
 
     pub fn as_u32(&self) -> u32 {
-        self.0
+        self.0 >> 1
     }
 
     pub fn is_valid(&self) -> bool {
@@ -48,8 +48,17 @@ impl StateID {
         *self == Self::DEAD
     }
 
-    pub fn new(id: u32) -> Self {
-        Self(id)
+    #[inline(always)]
+    pub fn has_lowest_match(&self) -> bool {
+        (self.0 & 1) == 1
+    }
+
+    pub fn _set_lowest_match(self) -> Self {
+        Self(self.0 | 1)
+    }
+
+    pub const fn new(id: u32) -> Self {
+        Self(id << 1)
     }
 
     pub fn new_hash_cons() -> VecHashCons {
@@ -69,7 +78,7 @@ impl Debug for StateID {
         } else if *self == StateID::MISSING {
             write!(f, "StateID(MISSING)")
         } else {
-            write!(f, "StateID({})", self.0)
+            write!(f, "StateID({},{})", self.0 >> 1, self.0 & 1)
         }
     }
 }
@@ -151,13 +160,12 @@ impl Regex {
 
     #[inline(always)]
     pub fn transition(&mut self, state: StateID, b: u8) -> StateID {
-        let mapped = self.alpha.map(b);
-        let idx = state.as_usize() * self.alpha.len() + mapped;
+        let idx = self.alpha.map_state(state, b);
         let new_state = self.state_table[idx];
         if new_state != StateID::MISSING {
             new_state
         } else {
-            let new_state = self.transition_inner(state, mapped as u8);
+            let new_state = self.transition_inner(state, self.alpha.map(b) as u8);
             self.num_transitions += 1;
             self.state_table[idx] = new_state;
             new_state
@@ -285,11 +293,10 @@ impl Regex {
 impl AlphabetInfo {
     pub fn from_exprset(exprset: &ExprSet, rx_list: &[ExprRef]) -> (Self, ExprSet, Vec<ExprRef>) {
         assert!(exprset.alphabet_size() == 256);
-        let compress = true;
 
         debug!("rx0: {}", exprset.expr_to_string_with_info(rx_list[0]));
 
-        let ((mut exprset, rx_list), mapping, alphabet_size) = if compress {
+        let ((mut exprset, rx_list), mapping, alphabet_size) = if cfg!(feature = "compress") {
             let mut compressor = ByteCompressor::new();
             let cost0 = exprset.cost;
             let (mut exprset, rx_list) = compressor.compress(&exprset, rx_list);
@@ -342,13 +349,27 @@ impl AlphabetInfo {
 
     #[inline(always)]
     pub fn map(&self, b: u8) -> usize {
-        self.mapping[b as usize] as usize
+        if cfg!(feature = "compress") {
+            self.mapping[b as usize] as usize
+        } else {
+            b as usize
+        }
+    }
+
+    #[inline(always)]
+    pub fn map_state(&self, state: StateID, b: u8) -> usize {
+        if cfg!(feature = "compress") {
+            self.map(b) + state.as_usize() * self.len()
+        } else {
+            b as usize + state.as_usize() * 256
+        }
     }
 
     pub fn inv_map(&self, v: usize) -> Option<u8> {
         self.inv_mapping[v]
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.size
     }
@@ -418,7 +439,7 @@ impl Regex {
     }
 
     fn insert_state(&mut self, d: ExprRef) -> StateID {
-        let id = StateID(self.rx_sets.insert(&[d.as_u32()]));
+        let id = StateID::new(self.rx_sets.insert(&[d.as_u32()]));
         if id.as_usize() >= self.state_descs.len() {
             self.append_state(StateDesc::default());
         }

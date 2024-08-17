@@ -22,3 +22,7 @@ bstr = { version = "1.9.1", default-features = false, features = ["std", "serde"
 [[bin]]
 name = "derivre"
 path = "src/derivre.rs"
+
+[features]
+default = ["compress"]
+compress = []
