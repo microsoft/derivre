@@ -14,9 +14,10 @@ impl ExprRef {
     pub const INVALID: ExprRef = ExprRef(0);
     pub const EMPTY_STRING: ExprRef = ExprRef(1);
     pub const NO_MATCH: ExprRef = ExprRef(2);
+    // the ones below can match invalid UTF8
     pub const ANY_BYTE: ExprRef = ExprRef(3);
-    pub const ANY_STRING: ExprRef = ExprRef(4);
-    pub const NON_EMPTY_STRING: ExprRef = ExprRef(5);
+    pub const ANY_BYTE_STRING: ExprRef = ExprRef(4);
+    pub const NON_EMPTY_BYTE_STRING: ExprRef = ExprRef(5);
 
     pub fn new(id: u32) -> Self {
         assert!(id != 0, "ExprRef(0) is reserved for invalid reference");
@@ -276,11 +277,11 @@ impl ExprSet {
             ),
             (
                 r.mk_repeat(ExprRef::ANY_BYTE, 0, u32::MAX),
-                ExprRef::ANY_STRING,
+                ExprRef::ANY_BYTE_STRING,
             ),
             (
                 r.mk_repeat(ExprRef::ANY_BYTE, 1, u32::MAX),
-                ExprRef::NON_EMPTY_STRING,
+                ExprRef::NON_EMPTY_BYTE_STRING,
             ),
         ];
 

@@ -106,8 +106,8 @@ impl ExprSet {
             if arg == prev || arg == ExprRef::NO_MATCH {
                 continue;
             }
-            if arg == ExprRef::ANY_STRING {
-                return ExprRef::ANY_STRING;
+            if arg == ExprRef::ANY_BYTE_STRING {
+                return ExprRef::ANY_BYTE_STRING;
             }
             match self.get(arg) {
                 Expr::Byte(_) | Expr::ByteSet(_) => {
@@ -283,6 +283,14 @@ impl ExprSet {
     }
 
     pub fn mk_byte_set_or(&mut self, args: &[ExprRef]) -> ExprRef {
+        self.mk_byte_set_or_core(args, false)
+    }
+
+    pub fn mk_byte_set_neg_or(&mut self, args: &[ExprRef]) -> ExprRef {
+        self.mk_byte_set_or_core(args, true)
+    }
+
+    fn mk_byte_set_or_core(&mut self, args: &[ExprRef], neg: bool) -> ExprRef {
         let mut byteset = vec![0u32; self.alphabet_words];
         for e in args {
             let n = self.get(*e);
@@ -294,6 +302,12 @@ impl ExprSet {
                     byteset_union(&mut byteset, s);
                 }
                 _ => panic!(),
+            }
+        }
+        if neg {
+            byteset = byteset.iter().map(|v| !*v).collect();
+            for idx in self.alphabet_size..self.alphabet_words * 32 {
+                byteset_clear(&mut byteset, idx);
             }
         }
         self.mk_byte_set(&byteset)
@@ -334,12 +348,12 @@ impl ExprSet {
         self.pay(args.len());
         args.sort_unstable();
         let mut dp = 0;
-        let mut prev = ExprRef::ANY_STRING;
+        let mut prev = ExprRef::ANY_BYTE_STRING;
         let mut had_empty = false;
         let mut nullable = true;
         for idx in 0..args.len() {
             let arg = args[idx];
-            if arg == prev || arg == ExprRef::ANY_STRING {
+            if arg == prev || arg == ExprRef::ANY_BYTE_STRING {
                 continue;
             }
             if arg == ExprRef::NO_MATCH {
@@ -358,7 +372,7 @@ impl ExprSet {
         args.truncate(dp);
 
         if args.len() == 0 {
-            ExprRef::ANY_STRING
+            ExprRef::ANY_BYTE_STRING
         } else if args.len() == 1 {
             args[0]
         } else if had_empty {
@@ -418,13 +432,13 @@ impl ExprSet {
     pub fn mk_not(&mut self, e: ExprRef) -> ExprRef {
         self.pay(1);
         if e == ExprRef::EMPTY_STRING {
-            ExprRef::NON_EMPTY_STRING
-        } else if e == ExprRef::NON_EMPTY_STRING {
+            ExprRef::NON_EMPTY_BYTE_STRING
+        } else if e == ExprRef::NON_EMPTY_BYTE_STRING {
             ExprRef::EMPTY_STRING
-        } else if e == ExprRef::ANY_STRING {
+        } else if e == ExprRef::ANY_BYTE_STRING {
             ExprRef::NO_MATCH
         } else if e == ExprRef::NO_MATCH {
-            ExprRef::ANY_STRING
+            ExprRef::ANY_BYTE_STRING
         } else {
             let n = self.get(e);
             match n {
