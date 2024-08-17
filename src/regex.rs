@@ -184,9 +184,14 @@ impl Regex {
         self.lookahead_len(text).is_some()
     }
 
-    pub fn lookahead_len(&mut self, text: &str) -> Option<usize> {
+    pub fn is_match_bytes(&mut self, text: &[u8]) -> bool {
+        self.lookahead_len_bytes(text).is_some()
+    }
+
+    pub fn lookahead_len_bytes(&mut self, text: &[u8]) -> Option<usize> {
         let mut state = self.initial_state();
-        for b in text.bytes() {
+        for b in text {
+            let b = *b;
             let new_state = self.transition(state, b);
             debug!("b: {:?} --{:?}--> {:?}", state, b as char, new_state);
             state = new_state;
@@ -195,6 +200,10 @@ impl Regex {
             }
         }
         self.lookahead_len_for_state(state)
+    }
+
+    pub fn lookahead_len(&mut self, text: &str) -> Option<usize> {
+        self.lookahead_len_bytes(text.as_bytes())
     }
 
     /// Estimate the size of the regex tables in bytes.
