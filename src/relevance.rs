@@ -111,10 +111,16 @@ impl RelevanceCache {
                     Expr::Or(_, _) => simplify(exprs, deriv.into_iter().flatten().collect()),
 
                     Expr::Not(_, _) => {
-                        let tmp = deriv[0]
+                        let mut tmp = deriv[0]
                             .iter()
-                            .map(|(b, r)| (exprs.mk_byte_set_not(*b), exprs.mk_not(*r)))
-                            .collect();
+                            .map(|(b, r)| (*b, exprs.mk_not(*r)))
+                            .collect::<Vec<_>>();
+                        let left_over = exprs.mk_byte_set_neg_or(
+                            &deriv[0].iter().map(|(b, _)| *b).collect::<Vec<_>>(),
+                        );
+                        if left_over != ExprRef::NO_MATCH {
+                            tmp.push((left_over, ExprRef::ANY_BYTE_STRING));
+                        }
                         simplify(exprs, tmp)
                     }
 
@@ -181,6 +187,7 @@ impl RelevanceCache {
             for e in &front_wave {
                 for (_, r) in self.deriv(exprs, *e) {
                     if exprs.is_positive(r) {
+                        debug!("  -> positive: {}", exprs.expr_to_string(r));
                         let mut mark_relevant = vec![*e];
                         while let Some(e) = mark_relevant.pop() {
                             if self.relevance_cache.contains_key(&e) {

@@ -113,6 +113,11 @@ impl PrettyPrinter {
 
     fn write_expr(&self, exprset: &ExprSet, id: ExprRef, f: &mut String) -> std::fmt::Result {
         let e = exprset.get(id);
+        // if exprset.is_nullable(id) {
+        //     write!(f, "@")?;
+        // } else if exprset.is_positive(id) {
+        //     write!(f, "%")?;
+        // }
         match e {
             Expr::EmptyString => write!(f, "ε"),
             Expr::NoMatch => write!(f, "∅"),

@@ -95,6 +95,12 @@ pub enum RegexAst {
 }
 
 impl RegexAst {
+    /// Regex is empty iff self ⊆ big
+    pub fn contained_in(&self, big: &RegexAst) -> RegexAst {
+        let small = self;
+        RegexAst::And(vec![small.clone(), RegexAst::Not(Box::new(big.clone()))])
+    }
+
     pub fn get_args(&self) -> &[RegexAst] {
         match self {
             RegexAst::And(asts) | RegexAst::Or(asts) | RegexAst::Concat(asts) => asts,
@@ -410,6 +416,12 @@ impl RegexBuilder {
     pub fn mk_regex(&mut self, s: &str) -> Result<ExprRef> {
         let parser = self.parser_builder.build();
         self.exprset.parse_expr(parser, s)
+    }
+
+    pub fn mk_contained_in(&mut self, small: &RegexAst, big: &RegexAst) -> Result<ExprRef> {
+        let a = RegexAst::ExprRef(self.mk(&small)?);
+        let b = RegexAst::ExprRef(self.mk(&big)?);
+        self.mk(&a.contained_in(&b))
     }
 
     pub fn mk(&mut self, ast: &RegexAst) -> Result<ExprRef> {

@@ -133,6 +133,10 @@ impl Regex {
         self.initial
     }
 
+    pub fn always_empty(&mut self) -> bool {
+        self.initial_state().is_dead()
+    }
+
     pub fn is_accepting(&mut self, state: StateID) -> bool {
         self.lookahead_len_for_state(state).is_some()
     }
