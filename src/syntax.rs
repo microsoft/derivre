@@ -136,5 +136,6 @@ impl ExprSet {
     pub fn parse_expr(&mut self, mut parser: Parser, rx: &str) -> Result<ExprRef> {
         let hir = parser.parse(rx)?;
         self.from_ast(&hir)
+            .map_err(|e| anyhow::anyhow!("{} in regex {:?}", e, rx))
     }
 }
