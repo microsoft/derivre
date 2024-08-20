@@ -27,6 +27,19 @@ impl DerivCache {
     }
 
     pub fn derivative(&mut self, exprs: &mut ExprSet, r: ExprRef, b: u8) -> ExprRef {
+        match exprs.get(r) {
+            Expr::Concat(_, args) => {
+                if exprs.get(args[0]).surely_no_match(b) {
+                    return ExprRef::NO_MATCH;
+                }
+            }
+            e => {
+                if e.surely_no_match(b) {
+                    return ExprRef::NO_MATCH;
+                }
+            }
+        }
+
         exprs.map(
             r,
             &mut self.state_table,

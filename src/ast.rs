@@ -156,6 +156,16 @@ pub fn byteset_from_range(start: u8, end: u8) -> Vec<u32> {
 }
 
 impl<'a> Expr<'a> {
+    pub fn surely_no_match(&self, b: u8) -> bool {
+        match self {
+            Expr::EmptyString => true,
+            Expr::NoMatch => true,
+            Expr::Byte(b2) => b != *b2,
+            Expr::ByteSet(s) => !byteset_contains(s, b as usize),
+            _ => false,
+        }
+    }
+
     pub fn matches_byte(&self, b: u8) -> bool {
         match self {
             Expr::EmptyString => false,
