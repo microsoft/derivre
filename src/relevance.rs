@@ -53,6 +53,7 @@ fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
 }
 
 fn simplify(exprs: &mut ExprSet, s: SymRes) -> SymRes {
+    exprs.pay(s.len());
     let mut s = group_by_first(s, |args| exprs.mk_or(args));
     swap_each(&mut s);
     let mut s = group_by_first(s, |args| exprs.mk_byte_set_or(&args));
@@ -185,7 +186,9 @@ impl RelevanceCache {
             debug!("wave: {:?}", front_wave);
             let mut new_wave = vec![];
             for e in &front_wave {
-                for (_, r) in self.deriv(exprs, *e) {
+                let dr = self.deriv(exprs, *e);
+                exprs.pay(dr.len());
+                for (_, r) in dr {
                     if exprs.is_positive(r) {
                         debug!("  -> positive: {}", exprs.expr_to_string(r));
                         let mut mark_relevant = vec![*e];

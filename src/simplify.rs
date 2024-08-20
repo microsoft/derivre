@@ -41,7 +41,7 @@ impl ExprSet {
     }
 
     pub fn mk_repeat(&mut self, e: ExprRef, min: u32, max: u32) -> ExprRef {
-        self.pay(1);
+        self.pay(2);
         if e == ExprRef::NO_MATCH {
             if min == 0 {
                 ExprRef::EMPTY_STRING
@@ -93,7 +93,7 @@ impl ExprSet {
     pub fn mk_or(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
         // TODO deal with byte ranges
         args = self.flatten_tag(ExprTag::Or, args);
-        self.pay(args.len());
+        self.pay(2 * args.len());
         args.sort_unstable();
         let mut dp = 0;
         let mut prev = ExprRef::NO_MATCH;
@@ -134,6 +134,7 @@ impl ExprSet {
         // TODO we should probably do sth similar in And
         if num_bytes > 1 {
             let mut byteset = vec![0u32; self.alphabet_words];
+            self.pay(args.len());
             args.retain(|&e| {
                 let n = self.get(e);
                 match n {
@@ -154,6 +155,7 @@ impl ExprSet {
 
         if num_lookahead > 1 {
             let mut lookahead = vec![];
+            self.pay(args.len());
             args.retain(|&e| {
                 let n = self.get(e);
                 match n {
@@ -345,7 +347,7 @@ impl ExprSet {
 
     pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
         args = self.flatten_tag(ExprTag::And, args);
-        self.pay(args.len());
+        self.pay(2 * args.len());
         args.sort_unstable();
         let mut dp = 0;
         let mut prev = ExprRef::ANY_BYTE_STRING;
@@ -430,7 +432,7 @@ impl ExprSet {
     }
 
     pub fn mk_not(&mut self, e: ExprRef) -> ExprRef {
-        self.pay(1);
+        self.pay(2);
         if e == ExprRef::EMPTY_STRING {
             ExprRef::NON_EMPTY_BYTE_STRING
         } else if e == ExprRef::NON_EMPTY_BYTE_STRING {
@@ -452,7 +454,7 @@ impl ExprSet {
     }
 
     pub fn mk_lookahead(&mut self, mut e: ExprRef, offset: u32) -> ExprRef {
-        self.pay(1);
+        self.pay(2);
         if e == ExprRef::NO_MATCH {
             return ExprRef::NO_MATCH;
         }

@@ -220,6 +220,10 @@ impl Regex {
             + self.rx_sets.num_bytes()
     }
 
+    pub fn cost(&self) -> usize {
+        self.exprs.cost()
+    }
+
     /// Check if the there is only one transition out of state.
     /// This is an approximation - see docs for NextByte.
     pub fn next_byte(&mut self, state: StateID) -> NextByte {

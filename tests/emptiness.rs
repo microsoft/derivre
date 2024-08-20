@@ -54,6 +54,9 @@ fn test_relevance() {
     check_empty(r"[a-z]+X", r"[a-z]+Y");
     check_non_empty(r"[a-z]+X", r"[a-z]+[XY]");
     check_non_empty(r"[a-z]+X", r"[a-z]+q*X");
+
+    check_empty(r".*A.{15}", r".*B.{15}");
+    check_non_empty(r".*A.{15}", r".*B.{14}");
 }
 
 #[test]
