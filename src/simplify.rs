@@ -5,7 +5,7 @@ use crate::ast::{
 
 impl ExprSet {
     pub(crate) fn pay(&mut self, cost: usize) {
-        self.cost += cost;
+        self.cost += cost as u64;
     }
 
     pub fn byte_set_from_byte(&self, b: u8) -> Vec<u32> {

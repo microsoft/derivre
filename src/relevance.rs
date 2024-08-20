@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use anyhow::Result;
+
 use crate::ast::{Expr, ExprRef, ExprSet};
 
 // This is map (ByteSet => RegExp); ByteSet is Expr::Byte or Expr::ByteSet,
@@ -169,17 +171,27 @@ impl RelevanceCache {
     }
 
     pub fn is_relevant(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> bool {
+        self.is_relevant_limited(exprs, top_expr, u64::MAX).unwrap()
+    }
+
+    pub fn is_relevant_limited(
+        &mut self,
+        exprs: &mut ExprSet,
+        top_expr: ExprRef,
+        max_fuel: u64,
+    ) -> Result<bool> {
         if exprs.is_positive(top_expr) {
-            return true;
+            return Ok(true);
         }
         if let Some(r) = self.relevance_cache.get(&top_expr) {
-            return *r;
+            return Ok(*r);
         }
 
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
         let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
         let mut pending = HashSet::new();
         let mut front_wave = vec![top_expr];
+        let c0 = exprs.cost();
         pending.insert(top_expr);
 
         loop {
@@ -203,7 +215,7 @@ impl RelevanceCache {
                         }
                         assert!(self.relevance_cache[&top_expr] == true);
                         debug!("relevant: {:?}", top_expr);
-                        return true;
+                        return Ok(true);
                     }
 
                     makes_relevant.entry(r).or_insert_with(Vec::new).push(*e);
@@ -224,8 +236,14 @@ impl RelevanceCache {
                     self.relevance_cache.insert(e, false);
                 }
                 assert!(self.relevance_cache[&top_expr] == false);
-                return false;
+                return Ok(false);
             }
+
+            anyhow::ensure!(
+                exprs.cost() - c0 <= max_fuel,
+                "maximum relevance check fuel {} exceeded",
+                max_fuel
+            );
         }
     }
 }

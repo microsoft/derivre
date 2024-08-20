@@ -258,7 +258,7 @@ pub struct ExprSet {
     exprs: VecHashCons,
     pub(crate) alphabet_size: usize,
     pub(crate) alphabet_words: usize,
-    pub(crate) cost: usize,
+    pub(crate) cost: u64,
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
 }
@@ -310,7 +310,7 @@ impl ExprSet {
         &self.pp
     }
 
-    pub fn cost(&self) -> usize {
+    pub fn cost(&self) -> u64 {
         self.cost
     }
 

@@ -220,7 +220,7 @@ impl Regex {
             + self.rx_sets.num_bytes()
     }
 
-    pub fn cost(&self) -> usize {
+    pub fn cost(&self) -> u64 {
         self.exprs.cost()
     }
 
