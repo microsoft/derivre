@@ -27,6 +27,10 @@ impl DerivCache {
     }
 
     pub fn derivative(&mut self, exprs: &mut ExprSet, r: ExprRef, b: u8) -> ExprRef {
+        // This kicks in for lexers with lots of keywords, that is regexps that are
+        // just concats of single bytes.
+        // Most of these do not match, so this provides very significant speedup.
+        // TODO add a flag on exprs to see if this even applies?
         match exprs.get(r) {
             Expr::Concat(_, args) => {
                 if exprs.get(args[0]).surely_no_match(b) {
@@ -40,6 +44,7 @@ impl DerivCache {
             }
         }
 
+        // regular path
         exprs.map(
             r,
             &mut self.state_table,
