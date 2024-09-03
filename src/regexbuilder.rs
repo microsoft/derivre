@@ -1,4 +1,4 @@
-use std::{fmt::Debug, vec};
+use std::fmt::Debug;
 
 use anyhow::{ensure, Result};
 use regex_syntax::ParserBuilder;
@@ -207,8 +207,12 @@ impl RegexBuilder {
         }
     }
 
+    pub fn to_regex_limited(&self, r: ExprRef, max_fuel: u64) -> Result<Regex> {
+        Regex::new_with_exprset(&self.exprset, r, max_fuel)
+    }
+
     pub fn to_regex(&self, r: ExprRef) -> Regex {
-        Regex::new_with_exprset(&self.exprset, r)
+        Regex::new_with_exprset(&self.exprset, r, u64::MAX).unwrap()
     }
 
     pub fn exprset(&self) -> &ExprSet {
@@ -430,9 +434,9 @@ impl RegexBuilder {
         self.mk(&a.contained_in(&b))
     }
 
-    pub fn is_contained_in(&mut self, small: &str, big: &str) -> Result<bool> {
+    pub fn is_contained_in(&mut self, small: &str, big: &str, max_fuel: u64) -> Result<bool> {
         let r = self.mk_contained_in(small, big)?;
-        Ok(self.to_regex(r).always_empty())
+        Ok(self.to_regex_limited(r, max_fuel)?.always_empty())
     }
 
     pub fn mk(&mut self, ast: &RegexAst) -> Result<ExprRef> {

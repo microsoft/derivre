@@ -276,6 +276,7 @@ impl RelevanceCache {
                         }
                         assert!(self.relevance_cache[&top_expr] == true);
                         debug!("relevant: {:?}", top_expr);
+                        // println!("cost: {}", exprs.cost() - c0);
                         return Ok(true);
                     }
 
@@ -298,6 +299,7 @@ impl RelevanceCache {
                     self.relevance_cache.insert(e, false);
                 }
                 assert!(self.relevance_cache[&top_expr] == false);
+                // println!("cost: {}", exprs.cost() - c0);
                 return Ok(false);
             }
 

@@ -122,7 +122,7 @@ impl Regex {
     pub fn new_with_parser(parser: regex_syntax::Parser, rx: &str) -> Result<Self> {
         let mut exprset = ExprSet::new(256);
         let rx = exprset.parse_expr(parser.clone(), rx)?;
-        Ok(Self::new_with_exprset(&exprset, rx))
+        Ok(Self::new_with_exprset(&exprset, rx, u64::MAX)?)
     }
 
     pub fn alpha(&self) -> &AlphabetInfo {
@@ -402,7 +402,11 @@ impl AlphabetInfo {
 
 // private implementation
 impl Regex {
-    pub(crate) fn new_with_exprset(exprset: &ExprSet, top_rx: ExprRef) -> Self {
+    pub(crate) fn new_with_exprset(
+        exprset: &ExprSet,
+        top_rx: ExprRef,
+        relevance_fuel: u64,
+    ) -> Result<Self> {
         let (alpha, exprset, rx_list) = AlphabetInfo::from_exprset(exprset, &[top_rx]);
         let top_rx = rx_list[0];
         let num_ast_nodes = exprset.len();
@@ -436,14 +440,16 @@ impl Regex {
         // in fact, transition from MISSING and DEAD should both lead to DEAD
         r.state_table.fill(StateID::DEAD);
 
-        if r.relevance.is_relevant(&mut r.exprs, top_rx) {
+        if r.relevance
+            .is_relevant_limited(&mut r.exprs, top_rx, relevance_fuel)?
+        {
             r.initial = r.insert_state(top_rx);
         } else {
             r.initial = StateID::DEAD;
         }
 
         assert!(r.alpha.len() > 0);
-        r
+        Ok(r)
     }
 
     fn append_state(&mut self, state_desc: StateDesc) {

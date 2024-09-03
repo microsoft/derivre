@@ -12,7 +12,7 @@ fn is_contained_in(small: &str, big: &str) -> bool {
     RegexBuilder::new()
         // .unicode(false)
         // .utf8(false)
-        .is_contained_in(small, big)
+        .is_contained_in(small, big, u64::MAX)
         .unwrap()
 }
 
@@ -33,7 +33,8 @@ fn check_non_empty(a: &str, b: &str) {
 }
 
 fn check_contains(small: &str, big: &str) {
-    println!("{} in {}", small, big);
+    let t0 = std::time::Instant::now();
+    print!("{} in {} ", small, big);
     if !is_contained_in(small, big) {
         panic!("{} is not contained in {}", small, big);
     }
@@ -41,6 +42,7 @@ fn check_contains(small: &str, big: &str) {
     if is_contained_in(big, small) {
         panic!("{} is contained in {}", big, small);
     }
+    println!("time: {:?}", t0.elapsed());
 }
 
 fn check_not_contains(small: &str, big: &str) {
@@ -68,7 +70,6 @@ fn test_relevance() {
 }
 
 /*
-
 */
 
 #[test]
@@ -97,5 +98,13 @@ fn test_contains() {
     check_contains(r"[aA]{0,1}A", r"[abA]{0,1}A");
     check_contains(r".*A.{15}", r".+");
     // exponential
-    check_contains(r".*A.{10}", r".*[AB].{10}");
+    check_contains(r".*A.{8}", r".*[AB].{8}");
+
+    // expecting this to be exponential
+    // the actual cost is around 1M
+    let r = RegexBuilder::new().is_contained_in(r".*A.{8}", r".*[AB].{8}", 100_000);
+    assert!(r.is_err());
+
+    let r = RegexBuilder::new().is_contained_in(r".*A.{8}", r".*[AB].{8}", 5_000_000);
+    assert!(r.unwrap() == true);
 }
