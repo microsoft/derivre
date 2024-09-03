@@ -97,7 +97,7 @@ fn make_disjoint(exprs: &mut ExprSet, inp: &SymRes) -> SymRes {
             let b_sub_a = exprs.mk_byte_set_sub(b, a);
             if b_sub_a != ExprRef::NO_MATCH {
                 // also add b-a -> bv (if non-empty)
-                res.push((b_sub_a, b));
+                res.push((b_sub_a, bv));
             }
 
             // a&b was already handled - remove from a
@@ -167,7 +167,13 @@ impl RelevanceCache {
 
                     Expr::Not(_, _) => {
                         let inner_deriv = make_disjoint(exprs, &deriv[0]);
-                        debug!("  disjoint: {:?} ==> {:?}", deriv[0], inner_deriv);
+                        debug!(
+                            "  disjoint: ==> {:?}",
+                            inner_deriv
+                                .iter()
+                                .map(|(b, r)| (exprs.expr_to_string(*b), exprs.expr_to_string(*r)))
+                                .collect::<Vec<_>>()
+                        );
                         let mut negated_deriv = inner_deriv
                             .iter()
                             .map(|(b, r)| (*b, exprs.mk_not(*r)))
@@ -276,6 +282,7 @@ impl RelevanceCache {
                     makes_relevant.entry(r).or_insert_with(Vec::new).push(*e);
 
                     if !pending.contains(&r) {
+                        // println!("  add {}", exprs.expr_to_string(r));
                         debug!("  add: {:?}", r);
                         pending.insert(r);
                         new_wave.push(r);

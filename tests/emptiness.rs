@@ -67,11 +67,12 @@ fn test_relevance() {
     check_non_empty(r".*A.{135}", r"[A-Z]+");
 }
 
+/*
+
+*/
+
 #[test]
 fn test_contains() {
-    // check_contains(r".*A.{4}", r".*[AB].{4}");
-    // panic!();
-
     check_contains(r"[a-b]", r"[a-z]");
     check_contains(r"[a-b]*", r"[a-z]*");
     check_contains(r"[a-b]+", r"[a-z]+");
@@ -89,6 +90,9 @@ fn test_contains() {
     check_not_contains(r#"["a-z\u{0080}-\u{FFFF}]+"#, &json_str);
     check_not_contains(r#"[\na-z\u{0080}-\u{FFFF}]+"#, &json_str);
     check_not_contains(r"[\\a-z]+", &json_str);
+
+    check_contains(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}");
+    check_contains(r"[B]*B[Bb]", r"[BC]*B[Bb]");
 
     check_contains(r"[aA]{0,1}A", r"[abA]{0,1}A");
     check_contains(r".*A.{15}", r".+");
