@@ -7,6 +7,11 @@ use crate::ast::{Expr, ExprRef, ExprSet};
 // This is map (ByteSet => RegExp); ByteSet is Expr::Byte or Expr::ByteSet,
 // and expresses the condition; RegExp is the derivative under that condition.
 // Conditions can be overlapping, but should not repeat.
+//
+// deriv(R) = [(S0,C0),...,(Sn,Cn)]
+//   means that
+// deriv(byte, R) = Ca | Cb ... when byte ∈ Sa and byte ∈ Sb[byte]
+// There is an implicit Sn+1 = Σ \ ⋃Si with Cn+1 = NO_MATCH
 type SymRes = Vec<(ExprRef, ExprRef)>;
 
 const DEBUG: bool = false;
@@ -63,6 +68,53 @@ fn simplify(exprs: &mut ExprSet, s: SymRes) -> SymRes {
     s
 }
 
+fn make_disjoint(exprs: &mut ExprSet, inp: &SymRes) -> SymRes {
+    // invariant: bytesets in res are all disjoint
+    let mut res: SymRes = vec![];
+    'input: for (mut a, av) in inp {
+        let av = *av;
+        // only iterate over items from previous step
+        // for each previous item, intersect it with the current item
+        // and store the results if any
+        let len0 = res.len();
+        for idx in 0..len0 {
+            let (b, bv) = res[idx];
+
+            // we've got lucky - direct match
+            if a == b {
+                res[idx] = (a, exprs.mk_or(vec![av, bv]));
+                continue 'input;
+            }
+
+            let a_and_b = exprs.mk_byte_set_and(a, b);
+            if a_and_b == ExprRef::NO_MATCH {
+                // this item doesn't intersect with the current one
+                continue;
+            }
+
+            // replace previous b with a&b -> av|ab
+            res[idx] = (a_and_b, exprs.mk_or(vec![av, bv]));
+            let b_sub_a = exprs.mk_byte_set_sub(b, a);
+            if b_sub_a != ExprRef::NO_MATCH {
+                // also add b-a -> bv (if non-empty)
+                res.push((b_sub_a, b));
+            }
+
+            // a&b was already handled - remove from a
+            a = exprs.mk_byte_set_sub(a, a_and_b);
+            if a == ExprRef::NO_MATCH {
+                continue 'input;
+            }
+        }
+
+        assert!(a != ExprRef::NO_MATCH);
+        // store the left-overs
+        res.push((a, av));
+    }
+
+    res
+}
+
 impl RelevanceCache {
     pub fn new() -> Self {
         RelevanceCache {
@@ -114,7 +166,9 @@ impl RelevanceCache {
                     Expr::Or(_, _) => simplify(exprs, deriv.into_iter().flatten().collect()),
 
                     Expr::Not(_, _) => {
-                        let mut tmp = deriv[0]
+                        let inner_deriv = make_disjoint(exprs, &deriv[0]);
+                        debug!("  disjoint: {:?} ==> {:?}", deriv[0], inner_deriv);
+                        let mut negated_deriv = inner_deriv
                             .iter()
                             .map(|(b, r)| (*b, exprs.mk_not(*r)))
                             .collect::<Vec<_>>();
@@ -122,9 +176,9 @@ impl RelevanceCache {
                             &deriv[0].iter().map(|(b, _)| *b).collect::<Vec<_>>(),
                         );
                         if left_over != ExprRef::NO_MATCH {
-                            tmp.push((left_over, ExprRef::ANY_BYTE_STRING));
+                            negated_deriv.push((left_over, ExprRef::ANY_BYTE_STRING));
                         }
-                        simplify(exprs, tmp)
+                        simplify(exprs, negated_deriv)
                     }
 
                     Expr::Repeat(_, e, min, max) => {
@@ -196,6 +250,7 @@ impl RelevanceCache {
 
         loop {
             debug!("wave: {:?}", front_wave);
+            // println!("wave: {}", front_wave.len());
             let mut new_wave = vec![];
             for e in &front_wave {
                 let dr = self.deriv(exprs, *e);

@@ -9,7 +9,11 @@ fn mk_and(a: &str, b: &str) -> Regex {
 }
 
 fn is_contained_in(small: &str, big: &str) -> bool {
-    RegexBuilder::new().is_contained_in(small, big).unwrap()
+    RegexBuilder::new()
+        // .unicode(false)
+        // .utf8(false)
+        .is_contained_in(small, big)
+        .unwrap()
 }
 
 fn check_empty(a: &str, b: &str) {
@@ -29,6 +33,7 @@ fn check_non_empty(a: &str, b: &str) {
 }
 
 fn check_contains(small: &str, big: &str) {
+    println!("{} in {}", small, big);
     if !is_contained_in(small, big) {
         panic!("{} is not contained in {}", small, big);
     }
@@ -55,12 +60,18 @@ fn test_relevance() {
     check_non_empty(r"[a-z]+X", r"[a-z]+[XY]");
     check_non_empty(r"[a-z]+X", r"[a-z]+q*X");
 
-    check_empty(r".*A.{15}", r".*B.{15}");
-    check_non_empty(r".*A.{15}", r".*B.{14}");
+    // doesn't seem exponential
+    check_empty(r".*A.{135}", r".*B.{135}");
+    check_non_empty(r".*A.{135}", r".*B.{134}");
+    check_empty(r".*A.{135}", r"[B-Z]+");
+    check_non_empty(r".*A.{135}", r"[A-Z]+");
 }
 
 #[test]
 fn test_contains() {
+    // check_contains(r".*A.{4}", r".*[AB].{4}");
+    // panic!();
+
     check_contains(r"[a-b]", r"[a-z]");
     check_contains(r"[a-b]*", r"[a-z]*");
     check_contains(r"[a-b]+", r"[a-z]+");
@@ -78,4 +89,9 @@ fn test_contains() {
     check_not_contains(r#"["a-z\u{0080}-\u{FFFF}]+"#, &json_str);
     check_not_contains(r#"[\na-z\u{0080}-\u{FFFF}]+"#, &json_str);
     check_not_contains(r"[\\a-z]+", &json_str);
+
+    check_contains(r"[aA]{0,1}A", r"[abA]{0,1}A");
+    check_contains(r".*A.{15}", r".+");
+    // exponential
+    check_contains(r".*A.{10}", r".*[AB].{10}");
 }

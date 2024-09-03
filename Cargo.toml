@@ -24,5 +24,6 @@ name = "derivre"
 path = "src/derivre.rs"
 
 [features]
-default = ["compress"]
+# default = ["compress"]
+default = []
 compress = []

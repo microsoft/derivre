@@ -345,6 +345,41 @@ impl ExprSet {
         }
     }
 
+    pub fn mk_byte_set_sub(&mut self, aa: ExprRef, bb: ExprRef) -> ExprRef {
+        match (self.get(aa), self.get(bb)) {
+            (Expr::Byte(x), Expr::Byte(y)) => {
+                if x == y {
+                    ExprRef::NO_MATCH
+                } else {
+                    aa
+                }
+            }
+            (Expr::Byte(a), Expr::ByteSet(b)) => {
+                if byteset_contains(b, a as usize) {
+                    ExprRef::NO_MATCH
+                } else {
+                    aa
+                }
+            }
+            (Expr::ByteSet(a), Expr::Byte(b)) => {
+                if byteset_contains(a, b as usize) {
+                    let mut a = a.to_vec();
+                    byteset_clear(&mut a, b as usize);
+                    self.mk_byte_set(&a)
+                } else {
+                    aa
+                }
+            }
+            (Expr::ByteSet(a), Expr::ByteSet(b)) => {
+                let mut a = a.to_vec();
+                let b = b.iter().map(|v| !*v).collect::<Vec<_>>();
+                byteset_intersection(&mut a, &b);
+                self.mk_byte_set(&a)
+            }
+            _ => panic!(),
+        }
+    }
+
     pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
         args = self.flatten_tag(ExprTag::And, args);
         self.pay(2 * args.len());
