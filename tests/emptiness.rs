@@ -16,6 +16,16 @@ fn is_contained_in(small: &str, big: &str) -> bool {
         .unwrap()
 }
 
+fn is_contained_in_prefixes(small: &str, big: &str) -> bool {
+    let mut bld = RegexBuilder::new();
+    // bld.unicode(false).utf8(false);
+    let big = RegexAst::Prefixes(Box::new(RegexAst::Regex(big.to_string())));
+    let eref = bld
+        .mk(&RegexAst::Regex(small.to_string()).contained_in(&big))
+        .unwrap();
+    bld.to_regex_limited(eref, u64::MAX).unwrap().always_empty()
+}
+
 fn check_empty(a: &str, b: &str) {
     let mut r = mk_and(a, b);
     assert!(r.always_empty());
@@ -54,6 +64,25 @@ fn check_not_contains(small: &str, big: &str) {
     }
 }
 
+fn check_contains_prefixes(small: &str, big: &str) {
+    if !is_contained_in_prefixes(small, big) {
+        panic!("{} is not contained in {}", small, big);
+    }
+
+    if is_contained_in_prefixes(big, small) {
+        panic!("{} is contained in {}", big, small);
+    }
+}
+
+fn check_not_contains_prefixes(small: &str, big: &str) {
+    if is_contained_in_prefixes(small, big) {
+        panic!("{} is contained in {}", small, big);
+    }
+    if is_contained_in_prefixes(big, small) {
+        panic!("{} is contained in {}", big, small);
+    }
+}
+
 #[test]
 fn test_relevance() {
     check_non_empty(r"[a-z]*X", r"[a-b]*X");
@@ -69,9 +98,6 @@ fn test_relevance() {
     check_non_empty(r".*A.{135}", r"[A-Z]+");
 }
 
-/*
-*/
-
 #[test]
 fn test_contains() {
     check_contains(r"[a-b]", r"[a-z]");
@@ -82,6 +108,7 @@ fn test_contains() {
     check_contains(r"[a-b]*X", r"[a-z]*X");
 
     let json_str = r#"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\x00-\x1F\x7F])*"#;
+
     check_contains(r"[a-z]+", &json_str);
     check_contains(r"[a-z\u{0080}-\u{FFFF}]+", &json_str);
     check_contains(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", &json_str);
@@ -107,4 +134,26 @@ fn test_contains() {
 
     let r = RegexBuilder::new().is_contained_in(r".*A.{8}", r".*[AB].{8}", 5_000_000);
     assert!(r.unwrap() == true);
+}
+
+#[test]
+fn test_prefixes() {
+    check_contains_prefixes(r"a", r"aB");
+    check_contains_prefixes(r"[a-z]+", r"[a-z]+BBB");
+
+    // note the final "
+    let json_str = r#"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\x00-\x1F\x7F])*""#;
+
+    check_contains_prefixes(r"[a-z]+", &json_str);
+    check_contains_prefixes(r"[a-z\u{0080}-\u{FFFF}]+", &json_str);
+    check_contains_prefixes(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", &json_str);
+    check_contains_prefixes(r" [a-zA-Z\u{0080}-\u{10FFFF}]*", &json_str);
+    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", &json_str);
+    check_not_contains_prefixes(r#"["a-z\u{0080}-\u{FFFF}]+"#, &json_str);
+    check_not_contains_prefixes(r#"[\na-z\u{0080}-\u{FFFF}]+"#, &json_str);
+    check_not_contains_prefixes(r"[\\a-z]+", &json_str);
+    check_contains_prefixes(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}X");
+    check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]X");
+    check_contains_prefixes(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}");
+    check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]");
 }

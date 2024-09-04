@@ -145,6 +145,11 @@ impl PrettyPrinter {
                     write!(f, "{{{}, {}}}", min, max)
                 }
             }
+            Expr::Prefixes(_, e) => {
+                write!(f, "prefixes(")?;
+                self.write_exprs(exprset, "", &[e], f)?;
+                write!(f, ")")
+            }
             Expr::Concat(_, es) => self.write_exprs(exprset, " ", es, f),
             Expr::Or(_, es) => self.write_exprs(exprset, " | ", es, f),
             Expr::And(_, es) => self.write_exprs(exprset, " & ", es, f),

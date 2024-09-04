@@ -75,6 +75,9 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
+    /// All prefixes of the words matched by the regex (including the empty string
+    /// and the words themselves).
+    Prefixes(Box<RegexAst>),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,
     /// Matches nothing. Same as Or([]).
@@ -104,9 +107,10 @@ impl RegexAst {
     pub fn get_args(&self) -> &[RegexAst] {
         match self {
             RegexAst::And(asts) | RegexAst::Or(asts) | RegexAst::Concat(asts) => asts,
-            RegexAst::LookAhead(ast) | RegexAst::Not(ast) | RegexAst::Repeat(ast, _, _) => {
-                std::slice::from_ref(ast)
-            }
+            RegexAst::LookAhead(ast)
+            | RegexAst::Not(ast)
+            | RegexAst::Repeat(ast, _, _)
+            | RegexAst::Prefixes(ast) => std::slice::from_ref(ast),
             RegexAst::EmptyString
             | RegexAst::NoMatch
             | RegexAst::Regex(_)
@@ -132,6 +136,7 @@ impl RegexAst {
             RegexAst::ByteLiteral(_) => "ByteLiteral",
             RegexAst::ExprRef(_) => "ExprRef",
             RegexAst::Repeat(_, _, _) => "Repeat",
+            RegexAst::Prefixes(_) => "Prefixes",
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
         }
@@ -182,7 +187,7 @@ impl RegexAst {
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
                 }
-                RegexAst::EmptyString | RegexAst::NoMatch => {}
+                RegexAst::EmptyString | RegexAst::NoMatch | RegexAst::Prefixes(_) => {}
             }
             for c in ast.get_args().iter().rev() {
                 todo.push(Some(c));
@@ -388,6 +393,12 @@ impl RegexBuilder {
                     }
                     exprset.mk_and(args)
                 }
+                Expr::Prefixes(_, _) => {
+                    if error.is_empty() {
+                        error = "prefixes";
+                    }
+                    exprset.mk_prefixes(args[0])
+                }
                 Expr::Or(_, _) => exprset.mk_or(args),
                 Expr::Concat(_, _) => exprset.mk_concat(args),
                 Expr::Not(_, _) => {
@@ -462,6 +473,7 @@ impl RegexBuilder {
                     RegexAst::Repeat(_, min, max) => {
                         self.exprset.mk_repeat(new_args[0], *min, *max)
                     }
+                    RegexAst::Prefixes(_) => self.exprset.mk_prefixes(new_args[0]),
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {
                         ensure!(

@@ -187,6 +187,11 @@ impl RelevanceCache {
                         simplify(exprs, negated_deriv)
                     }
 
+                    Expr::Prefixes(_, _) => deriv[0]
+                        .iter()
+                        .map(|(b, r)| (*b, exprs.mk_prefixes(*r)))
+                        .collect(),
+
                     Expr::Repeat(_, e, min, max) => {
                         let max = if max == u32::MAX {
                             u32::MAX
@@ -231,7 +236,8 @@ impl RelevanceCache {
     }
 
     pub fn is_non_empty(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> bool {
-        self.is_non_empty_limited(exprs, top_expr, u64::MAX).unwrap()
+        self.is_non_empty_limited(exprs, top_expr, u64::MAX)
+            .unwrap()
     }
 
     pub fn is_non_empty_limited(

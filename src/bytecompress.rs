@@ -68,6 +68,7 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
+                Expr::Prefixes(_, _) => trg.mk_prefixes(args[0]),
                 Expr::Concat(_, _) => trg.mk_concat(args),
                 Expr::Or(_, _) => trg.mk_or(args),
                 Expr::And(_, _) => trg.mk_and(args),
