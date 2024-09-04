@@ -441,7 +441,7 @@ impl Regex {
         r.state_table.fill(StateID::DEAD);
 
         if r.relevance
-            .is_relevant_limited(&mut r.exprs, top_rx, relevance_fuel)?
+            .is_non_empty_limited(&mut r.exprs, top_rx, relevance_fuel)?
         {
             r.initial = r.insert_state(top_rx);
         } else {
@@ -477,7 +477,7 @@ impl Regex {
         if d == ExprRef::NO_MATCH {
             StateID::DEAD
         } else {
-            if self.relevance.is_relevant(&mut self.exprs, d) {
+            if self.relevance.is_non_empty(&mut self.exprs, d) {
                 self.insert_state(d)
             } else {
                 StateID::DEAD

@@ -230,11 +230,11 @@ impl RelevanceCache {
         )
     }
 
-    pub fn is_relevant(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> bool {
-        self.is_relevant_limited(exprs, top_expr, u64::MAX).unwrap()
+    pub fn is_non_empty(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> bool {
+        self.is_non_empty_limited(exprs, top_expr, u64::MAX).unwrap()
     }
 
-    pub fn is_relevant_limited(
+    pub fn is_non_empty_limited(
         &mut self,
         exprs: &mut ExprSet,
         top_expr: ExprRef,
@@ -254,6 +254,8 @@ impl RelevanceCache {
         let c0 = exprs.cost();
         pending.insert(top_expr);
 
+        debug!("\nstart relevance: {}", exprs.expr_to_string(top_expr));
+
         loop {
             debug!("wave: {:?}", front_wave);
             // println!("wave: {}", front_wave.len());
@@ -262,8 +264,12 @@ impl RelevanceCache {
                 let dr = self.deriv(exprs, *e);
                 exprs.pay(dr.len());
                 for (_, r) in dr {
-                    if exprs.is_positive(r) {
-                        debug!("  -> positive: {}", exprs.expr_to_string(r));
+                    if exprs.is_positive(r) || self.relevance_cache.get(&r) == Some(&true) {
+                        debug!(
+                            "  -> found relevant: {} pos={}",
+                            exprs.expr_to_string(r),
+                            exprs.is_positive(r)
+                        );
                         let mut mark_relevant = vec![*e];
                         while let Some(e) = mark_relevant.pop() {
                             if self.relevance_cache.contains_key(&e) {
