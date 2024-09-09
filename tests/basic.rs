@@ -333,6 +333,20 @@ fn check_one_quote(rx: &str, options: &JsonQuoteOptions, allow_nl: bool) -> Rege
     rx
 }
 
+fn check_json_quote(
+    options: &JsonQuoteOptions,
+    rx: &str,
+    should_match: &[&str],
+    should_not_match: &[&str],
+) {
+    let mut b = RegexBuilder::new();
+    let e = b.mk_regex(rx).unwrap();
+    let e = b.json_quote(e, options).unwrap();
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, should_match);
+    no_match_many(&mut rx, should_not_match);
+}
+
 #[test]
 fn test_json_quote() {
     let mut b = RegexBuilder::new();
@@ -348,10 +362,31 @@ fn test_json_quote() {
         match_many(&mut rx, &["a", "b", "c", "\\\""]);
         no_match_many(&mut rx, &["A", "\"", "\\"]);
 
+        check_json_quote(&options, r#"""#, &["\\\""], &["\"", "a", ""]);
+        check_json_quote(&options, r#"\\"#, &["\\\\"], &["\\", "a", ""]);
+        if options.is_allowed(b'u') {
+            check_json_quote(&options, r#"\x7F"#, &["\\u007F"], &["\x7F", "a", ""]);
+        }
+
         check_one_quote(r#"."#, &options, false);
         check_one_quote(r#".|\n"#, &options, true);
 
         let mut rx = check_one_quote(r#"[^\u0017]"#, &options, true);
         no_match_many(&mut rx, &["\\u0017"]);
     }
+}
+
+#[test]
+fn test_json_qbig() {
+    let mut b = RegexBuilder::new();
+    let options = JsonQuoteOptions::with_unicode();
+    let rx = "\\w+[\\\\](\\w+\\.)*\\w+\\.dll";
+    // let rx = "a[\\\\]b";
+    let e0 = b.mk_regex(rx).unwrap();
+    let c0 = b.exprset().cost();
+    let e = b.json_quote(e0, &options).unwrap();
+    let c1 = b.exprset().cost();
+    println!("*** {:?} {}", rx, b.exprset().expr_to_string(e0));
+    println!("  >>> {}", b.exprset().expr_to_string(e));
+    println!("  cost {} {}", c0, c1);
 }

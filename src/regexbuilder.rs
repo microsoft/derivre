@@ -348,6 +348,12 @@ impl RegexBuilder {
                 }
                 byteset_clear(&mut bs_without_ctrl, b'"' as usize);
             }
+            if byteset_contains(&bs_without_ctrl, 0x7F) {
+                if options.is_allowed(b'u') {
+                    alts.push(exprset.mk_literal("\\u007F"));
+                }
+                byteset_clear(&mut bs_without_ctrl, 0x7F);
+            }
             let bs_without_ctrl = exprset.mk_byte_set(&bs_without_ctrl);
             alts.push(bs_without_ctrl);
             exprset.mk_or(alts)
@@ -374,6 +380,7 @@ impl RegexBuilder {
                     if bs[0] == 0
                         && !byteset_contains(&bs, b'\\' as usize)
                         && !byteset_contains(&bs, b'"' as usize)
+                        && !byteset_contains(&bs, 0x7F)
                     {
                         exprset.mk_byte_set(&bs)
                     } else {
@@ -381,7 +388,7 @@ impl RegexBuilder {
                     }
                 }
                 Expr::Byte(b) => {
-                    if b < 0x20 {
+                    if b < 0x20 || b"\"\\\x7F".contains(&b) {
                         quote_byteset(exprset, byteset_from_range(b, b), &options)
                     } else {
                         exprset.mk_byte(b)
