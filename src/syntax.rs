@@ -19,23 +19,97 @@ struct StackEntry<'a> {
     allow_end: bool,
 }
 
+#[derive(PartialEq, Eq, Debug)]
+enum TrieSelector {
+    Byte(u8),
+    ByteSet(Vec<u32>),
+}
+
+struct TrieNode {
+    selector: TrieSelector,
+    is_match: bool,
+    children: Vec<TrieNode>,
+}
+
+impl TrieNode {
+    fn new(selector: TrieSelector) -> Self {
+        Self {
+            selector,
+            children: Vec::new(),
+            is_match: false,
+        }
+    }
+
+    fn child_at(&mut self, sel: TrieSelector) -> &mut Self {
+        let idx = self
+            .children
+            .iter()
+            .position(|child| child.selector == sel)
+            .unwrap_or_else(|| {
+                let l = self.children.len();
+                self.children.push(Self::new(sel));
+                l
+            });
+        &mut self.children[idx]
+    }
+
+    fn build_tail(&self, set: &mut ExprSet) -> ExprRef {
+        let mut children = Vec::new();
+        for child in &self.children {
+            children.push(child.build(set));
+        }
+        if self.is_match {
+            children.push(ExprRef::EMPTY_STRING);
+        }
+        if children.len() == 1 {
+            children[0]
+        } else {
+            set.mk_or(children)
+        }
+    }
+
+    fn build(&self, set: &mut ExprSet) -> ExprRef {
+        let tail = self.build_tail(set);
+        let head = match &self.selector {
+            TrieSelector::Byte(b) => set.mk_byte(*b),
+            TrieSelector::ByteSet(bs) => set.mk_byte_set(&bs),
+        };
+        set.mk_concat(vec![head, tail])
+    }
+}
+
 impl ExprSet {
     fn handle_unicode_ranges(&mut self, u: &ClassUnicode) -> ExprRef {
-        let mut alternatives = Vec::new();
+        let mut root = TrieNode::new(TrieSelector::Byte(0));
+
+        let key = u.ranges().iter().map(|r| (r.start() ,r.end() )).collect::<Vec<_>>();
+
+        if let Some(r) = self.unicode_cache.get(&key) {
+            return *r;
+        }
 
         for range in u.ranges() {
             for seq in Utf8Sequences::new(range.start(), range.end()) {
-                let v = seq
-                    .as_slice()
-                    .iter()
-                    .map(|s| self.mk_byte_set(&byteset_from_range(s.start, s.end)))
-                    .collect();
-                alternatives.push(self.mk_concat(v));
+                let mut node_ptr = &mut root;
+                for s in &seq {
+                    let sel = if s.start == s.end {
+                        TrieSelector::Byte(s.start)
+                    } else {
+                        TrieSelector::ByteSet(byteset_from_range(s.start, s.end))
+                    };
+                    node_ptr = node_ptr.child_at(sel);
+                }
+                node_ptr.is_match = true;
             }
         }
 
-        let r = self.mk_or(alternatives);
-        // println!("result: {}", self.expr_to_string(r));
+        let opt = self.optimize;
+        self.optimize = false;
+        let r = root.build_tail(self);
+        self.optimize = opt;
+
+        self.unicode_cache.insert(key, r);
+
         r
     }
 

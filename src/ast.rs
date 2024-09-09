@@ -267,6 +267,7 @@ pub struct ExprSet {
     pub(crate) cost: u64,
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
+    pub(crate) unicode_cache: std::collections::HashMap<Vec<(char, char)>, ExprRef>,
 }
 
 impl ExprSet {
@@ -280,6 +281,7 @@ impl ExprSet {
             cost: 0,
             pp: PrettyPrinter::new_simple(alphabet_size),
             optimize: true,
+            unicode_cache: std::collections::HashMap::new(),
         };
 
         let id = r.exprs.insert(&[]);

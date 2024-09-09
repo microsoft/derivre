@@ -382,11 +382,13 @@ fn test_json_qbig() {
     let options = JsonQuoteOptions::with_unicode();
     let rx = "\\w+[\\\\](\\w+\\.)*\\w+\\.dll";
     // let rx = "a[\\\\]b";
+    let t0 = std::time::Instant::now();
     let e0 = b.mk_regex(rx).unwrap();
+    let el0 = t0.elapsed();
     let c0 = b.exprset().cost();
     let e = b.json_quote(e0, &options).unwrap();
     let c1 = b.exprset().cost();
-    println!("*** {:?} {}", rx, b.exprset().expr_to_string(e0));
-    println!("  >>> {}", b.exprset().expr_to_string(e));
-    println!("  cost {} {}", c0, c1);
+    println!("*** {:?} {}", rx, b.exprset().expr_to_string(e0).len());
+    println!("  >>> {}", b.exprset().expr_to_string(e).len());
+    println!("  cost {} {} {:?}", c0, c1, el0);
 }
