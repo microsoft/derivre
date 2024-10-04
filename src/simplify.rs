@@ -48,8 +48,15 @@ impl ExprSet {
             ExprRef::EMPTY_STRING
         } else {
             match self.get(e) {
-                Expr::Prefixes(_, e) => e,
-                _ => self.mk(Expr::Prefixes(ExprFlags::POSITIVE_NULLABLE, e)),
+                Expr::Prefixes(_, _) => e,
+                _ => self.mk(Expr::Prefixes(
+                    if self.is_positive(e) {
+                        ExprFlags::POSITIVE_NULLABLE
+                    } else {
+                        ExprFlags::ZERO
+                    },
+                    e,
+                )),
             }
         }
     }
