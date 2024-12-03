@@ -310,6 +310,26 @@ impl ExprSet {
         r
     }
 
+    /// If this returns true, then the regex will match only strings
+    /// starting with the given prefix.
+    /// If this returns false, then it's possible (but not sure) it will match something else.
+    pub fn has_simply_forced_bytes(&self, e: ExprRef, bytes: &[u8]) -> bool {
+        if bytes.is_empty() {
+            return true;
+        }
+        match self.get(e) {
+            Expr::Byte(b) => bytes.len() == 1 && bytes[0] == b,
+            Expr::Concat(_, refs) if refs.len() >= bytes.len() => refs[0..bytes.len()]
+                .iter()
+                .zip(bytes.iter())
+                .all(|(&r, &b)| match self.get(r) {
+                    Expr::Byte(b2) => b == b2,
+                    _ => false,
+                }),
+            _ => false,
+        }
+    }
+
     pub fn set_pp(&mut self, pp: PrettyPrinter) {
         self.pp = pp;
     }
