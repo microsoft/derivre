@@ -326,8 +326,12 @@ impl ExprSet {
         self.optimize = false;
     }
 
+    pub fn expr_to_string_max_len(&self, id: ExprRef, max_len: usize) -> String {
+        self.pp.expr_to_string(&self, id, max_len)
+    }
+
     pub fn expr_to_string(&self, id: ExprRef) -> String {
-        self.pp.expr_to_string(&self, id)
+        self.expr_to_string_max_len(id, 1024)
     }
 
     pub fn expr_to_string_with_info(&self, id: ExprRef) -> String {

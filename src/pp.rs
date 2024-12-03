@@ -14,9 +14,9 @@ pub struct PrettyPrinter {
 }
 
 impl PrettyPrinter {
-    pub fn expr_to_string(&self, exprset: &ExprSet, id: ExprRef) -> String {
+    pub fn expr_to_string(&self, exprset: &ExprSet, id: ExprRef, max_len: usize) -> String {
         let mut s = String::new();
-        self.write_expr(exprset, id, &mut s).unwrap();
+        self.write_expr(exprset, id, &mut s, max_len).unwrap();
         s
     }
 
@@ -94,24 +94,91 @@ impl PrettyPrinter {
         r
     }
 
+    fn write_concat(
+        &self,
+        exprset: &ExprSet,
+        ids: &[ExprRef],
+        f: &mut String,
+        max_len: usize,
+    ) -> std::fmt::Result {
+        write!(f, "(")?;
+        let mut i = 0;
+        while i < ids.len() {
+            if f.len() > max_len {
+                write!(f, "…")?;
+                break;
+            }
+
+            if i > 0 {
+                write!(f, " ")?;
+            }
+
+            let mut bytes = vec![];
+            while i + bytes.len() < ids.len() {
+                let e = exprset.get(ids[i + bytes.len()]);
+                match e {
+                    Expr::Byte(b) => bytes.push(b),
+                    _ => break,
+                }
+            }
+            let mut num_elts = 1;
+            if bytes.len() > 1 {
+                num_elts = bytes.len();
+                if let Ok(s) = String::from_utf8(bytes) {
+                    if f.len() + s.len() > max_len {
+                        write!(f, "…")?;
+                        break;
+                    } else {
+                        write!(f, "{:?}", s)?;
+                    }
+                    i += num_elts;
+                    continue;
+                }
+            }
+            for j in 0..num_elts {
+                if f.len() > max_len {
+                    write!(f, "…")?;
+                    break;
+                }
+                if j > 0 {
+                    write!(f, " ")?;
+                }
+                self.write_expr(exprset, ids[i + j], f, max_len)?;
+            }
+            i += num_elts;
+        }
+        write!(f, ")")
+    }
+
     fn write_exprs(
         &self,
         exprset: &ExprSet,
         sep: &str,
         ids: &[ExprRef],
         f: &mut String,
+        max_len: usize,
     ) -> std::fmt::Result {
         write!(f, "(")?;
         for i in 0..ids.len() {
+            if f.len() > max_len {
+                write!(f, "…")?;
+                break;
+            }
             if i > 0 {
                 write!(f, "{}", sep)?;
             }
-            self.write_expr(exprset, ids[i], f)?;
+            self.write_expr(exprset, ids[i], f, max_len)?;
         }
         write!(f, ")")
     }
 
-    fn write_expr(&self, exprset: &ExprSet, id: ExprRef, f: &mut String) -> std::fmt::Result {
+    fn write_expr(
+        &self,
+        exprset: &ExprSet,
+        id: ExprRef,
+        f: &mut String,
+        max_len: usize,
+    ) -> std::fmt::Result {
         let e = exprset.get(id);
         // if exprset.is_nullable(id) {
         //     write!(f, "@")?;
@@ -125,16 +192,16 @@ impl PrettyPrinter {
             Expr::ByteSet(s) => write!(f, "[{}]", self.byteset_to_string(s)),
             Expr::Lookahead(_, e, offset) => {
                 write!(f, "(?[+{offset}]=")?;
-                self.write_exprs(exprset, "", &[e], f)?;
+                self.write_exprs(exprset, "", &[e], f, max_len)?;
                 write!(f, ")")
             }
             Expr::Not(_, e) => {
                 write!(f, "(¬")?;
-                self.write_exprs(exprset, "", &[e], f)?;
+                self.write_exprs(exprset, "", &[e], f, max_len)?;
                 write!(f, ")")
             }
             Expr::Repeat(_, e, min, max) => {
-                self.write_exprs(exprset, "", &[e], f)?;
+                self.write_exprs(exprset, "", &[e], f, max_len)?;
                 if min == 0 && max == u32::MAX {
                     write!(f, "*")
                 } else if min == 1 && max == u32::MAX {
@@ -147,12 +214,12 @@ impl PrettyPrinter {
             }
             Expr::Prefixes(_, e) => {
                 write!(f, "prefixes(")?;
-                self.write_exprs(exprset, "", &[e], f)?;
+                self.write_exprs(exprset, "", &[e], f, max_len)?;
                 write!(f, ")")
             }
-            Expr::Concat(_, es) => self.write_exprs(exprset, " ", es, f),
-            Expr::Or(_, es) => self.write_exprs(exprset, " | ", es, f),
-            Expr::And(_, es) => self.write_exprs(exprset, " & ", es, f),
+            Expr::Concat(_, es) => self.write_concat(exprset, es, f, max_len),
+            Expr::Or(_, es) => self.write_exprs(exprset, " | ", es, f, max_len),
+            Expr::And(_, es) => self.write_exprs(exprset, " & ", es, f, max_len),
         }
     }
 }

@@ -142,7 +142,7 @@ impl RegexAst {
         }
     }
 
-    pub fn write_to_str(&self, dst: &mut String, max_len: usize) {
+    pub fn write_to_str(&self, dst: &mut String, max_len: usize, exprset: Option<&ExprSet>) {
         let mut todo = vec![Some(self)];
         while let Some(ast) = todo.pop() {
             if dst.len() >= max_len {
@@ -182,7 +182,12 @@ impl RegexAst {
                     dst.push_str(&format!(" {:?}", String::from_utf8_lossy(&s)));
                 }
                 RegexAst::ExprRef(r) => {
-                    dst.push_str(&format!(" {:?}", r));
+                    if let Some(es) = exprset {
+                        let e_len = max_len.saturating_sub(dst.len());
+                        dst.push_str(&format!(" {}", es.expr_to_string_max_len(*r, e_len)));
+                    } else {
+                        dst.push_str(&format!(" {}", r.as_usize()));
+                    }
                 }
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
@@ -199,7 +204,7 @@ impl RegexAst {
 impl Debug for RegexAst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
-        self.write_to_str(&mut s, 100);
+        self.write_to_str(&mut s, 512, None);
         write!(f, "{}", s)
     }
 }
