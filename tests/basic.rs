@@ -397,9 +397,7 @@ fn test_json_qbig() {
 fn test_json_uxxxx() {
     let mut b = RegexBuilder::new();
     let options = JsonQuoteOptions::with_unicode();
-    let rx = ".";
-    // let rx = "a[\\\\]b";
-    let e0 = b.mk_regex(rx).unwrap();
+    let e0 = b.mk_regex(".").unwrap();
     let e = b.json_quote(e0, &options).unwrap();
     let mut rx = b.to_regex(e);
     for x in 0..=0xffff {
