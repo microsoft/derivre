@@ -392,3 +392,23 @@ fn test_json_qbig() {
     println!("  >>> {}", b.exprset().expr_to_string(e).len());
     println!("  cost {} {} {:?}", c0, c1, el0);
 }
+
+#[test]
+fn test_json_uxxxx() {
+    let mut b = RegexBuilder::new();
+    let options = JsonQuoteOptions::with_unicode();
+    let rx = ".";
+    // let rx = "a[\\\\]b";
+    let e0 = b.mk_regex(rx).unwrap();
+    let e = b.json_quote(e0, &options).unwrap();
+    let mut rx = b.to_regex(e);
+    for x in 0..=0xffff {
+        for s in &[format!("\\u{:04X}", x), format!("\\u{:04x}", x)] {
+            if x == 0x007f || (0x0000 <= x && x <= 0x001f && x != 0x000a) {
+                match_(&mut rx, &s);
+            } else {
+                no_match(&mut rx, &s);
+            }
+        }
+    }
+}

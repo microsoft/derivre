@@ -24,6 +24,9 @@ pub struct JsonQuoteOptions {
     /// Which escapes to allow (after \).
     /// Represents a set of bytes. Allowed bytes:
     /// n, r, b, t, f, \, ", u
+    /// Note that 'u' allows the \uXXXX form only for ASCII control
+    /// characters, not general Unicode, in particular for characters
+    /// \u0000-\u001F and \u007F (if they are allowed by the regex).
     pub allowed_escapes: String,
 
     /// When set, "..." will not be added around the final regular expression.
@@ -307,7 +310,7 @@ impl RegexBuilder {
             let upref = exprset.mk_literal("u00");
             let backslash = exprset.mk_byte(b'\\');
 
-            let quoted = if bs[0] == 0xffff_ffff & !(1 << 10) {
+            let quoted = if bs[0] == (0xffff_ffff & !(1 << b'\n')) {
                 // everything except for \n
                 quote_all_ctrl(exprset, false, options)
             } else if bs[0] == 0xffff_ffff {
@@ -356,6 +359,7 @@ impl RegexBuilder {
             if byteset_contains(&bs_without_ctrl, 0x7F) {
                 if options.is_allowed(b'u') {
                     alts.push(exprset.mk_literal("\\u007F"));
+                    alts.push(exprset.mk_literal("\\u007f"));
                 }
                 byteset_clear(&mut bs_without_ctrl, 0x7F);
             }
@@ -379,23 +383,24 @@ impl RegexBuilder {
                 Expr::EmptyString => ExprRef::EMPTY_STRING,
                 Expr::NoMatch => ExprRef::NO_MATCH,
                 Expr::ByteSet(bs) => {
-                    // if the range doesn't allow any of the characters below 0x20,
-                    // we don't need to quote
                     let bs = bs.to_vec();
-                    if bs[0] == 0
-                        && !byteset_contains(&bs, b'\\' as usize)
-                        && !byteset_contains(&bs, b'"' as usize)
-                        && !byteset_contains(&bs, 0x7F)
+                    let has_bytes_below_0x20 = bs[0] != 0;
+                    if has_bytes_below_0x20
+                        || byteset_contains(&bs, b'\\' as usize)
+                        || byteset_contains(&bs, b'"' as usize)
+                        || byteset_contains(&bs, 0x7F)
                     {
-                        exprset.mk_byte_set(&bs)
-                    } else {
                         quote_byteset(exprset, bs, &options)
+                    } else {
+                        // no need to quote
+                        exprset.mk_byte_set(&bs)
                     }
                 }
                 Expr::Byte(b) => {
                     if b < 0x20 || b"\"\\\x7F".contains(&b) {
                         quote_byteset(exprset, byteset_from_range(b, b), &options)
                     } else {
+                        // no need to quote
                         exprset.mk_byte(b)
                     }
                 }
@@ -425,11 +430,11 @@ impl RegexBuilder {
         });
 
         if error.is_empty() {
-            let q = self.exprset.mk_byte(b'"');
+            let quote = self.exprset.mk_byte(b'"');
             let r = if options.raw_mode {
                 r
             } else {
-                self.exprset.mk_concat(vec![q, r, q])
+                self.exprset.mk_concat(vec![quote, r, quote])
             };
             Ok(r)
         } else {
