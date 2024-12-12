@@ -17,9 +17,18 @@ fn is_contained_in(small: &str, big: &str) -> bool {
 }
 
 fn is_contained_in_prefixes(small: &str, big: &str) -> bool {
+    is_contained_in_prefixes_except(small, big, "")
+}
+
+fn is_contained_in_prefixes_except(small: &str, big: &str, except: &str) -> bool {
     let mut bld = RegexBuilder::new();
     // bld.unicode(false).utf8(false);
-    let big = RegexAst::Prefixes(Box::new(RegexAst::Regex(big.to_string())));
+    let mut inner = RegexAst::Regex(big.to_string());
+    if !except.is_empty() {
+        let excl = RegexAst::Not(Box::new(RegexAst::Regex(except.to_string())));
+        inner = RegexAst::And(vec![inner, excl]);
+    }
+    let big = RegexAst::Prefixes(Box::new(inner));
     let eref = bld
         .mk(&RegexAst::Regex(small.to_string()).contained_in(&big))
         .unwrap();
@@ -71,6 +80,12 @@ fn check_contains_prefixes(small: &str, big: &str) {
 
     if is_contained_in_prefixes(big, small) {
         panic!("{} is contained in {}", big, small);
+    }
+}
+
+fn check_contains_prefixes_except(small: &str, big: &str, except: &str) {
+    if !is_contained_in_prefixes_except(small, big, except) {
+        panic!("{} is not contained in {} - {}", small, big, except);
     }
 }
 
@@ -156,4 +171,9 @@ fn test_prefixes() {
     check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]X");
     check_contains_prefixes(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}");
     check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]");
+
+    check_contains_prefixes(r"[a-z]+", &json_str);
+
+    check_contains_prefixes_except(r"[abc]+", "[abcd]+Q", r#"aQ"#);
+    check_contains_prefixes_except(r"[a-z]+", &json_str, r#"(foo|bar)""#);
 }

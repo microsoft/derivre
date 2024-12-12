@@ -78,8 +78,9 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
-    /// All prefixes of the words matched by the regex (including the empty string
-    /// and the words themselves).
+    /// Empty string plus all prefixes of the words matched by the regex (including the 
+    /// words matched themselves).
+    /// Always includes empty string.
     Prefixes(Box<RegexAst>),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,

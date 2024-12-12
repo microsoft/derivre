@@ -49,14 +49,7 @@ impl ExprSet {
         } else {
             match self.get(e) {
                 Expr::Prefixes(_, _) => e,
-                _ => self.mk(Expr::Prefixes(
-                    if self.is_positive(e) {
-                        ExprFlags::POSITIVE_NULLABLE
-                    } else {
-                        ExprFlags::ZERO
-                    },
-                    e,
-                )),
+                _ => self.mk(Expr::Prefixes(ExprFlags::POSITIVE_NULLABLE, e)),
             }
         }
     }
