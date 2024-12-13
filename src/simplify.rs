@@ -40,20 +40,6 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_prefixes(&mut self, e: ExprRef) -> ExprRef {
-        self.pay(2);
-        if e == ExprRef::NO_MATCH {
-            ExprRef::NO_MATCH
-        } else if e == ExprRef::EMPTY_STRING {
-            ExprRef::EMPTY_STRING
-        } else {
-            match self.get(e) {
-                Expr::Prefixes(_, _) => e,
-                _ => self.mk(Expr::Prefixes(ExprFlags::POSITIVE_NULLABLE, e)),
-            }
-        }
-    }
-
     pub fn mk_repeat(&mut self, e: ExprRef, min: u32, max: u32) -> ExprRef {
         self.pay(2);
         if e == ExprRef::NO_MATCH {

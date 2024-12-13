@@ -64,7 +64,6 @@ impl DerivCache {
                     Expr::And(_, _) => exprs.mk_and(deriv),
                     Expr::Or(_, _) => exprs.mk_or(deriv),
                     Expr::Not(_, _) => exprs.mk_not(deriv[0]),
-                    Expr::Prefixes(_, _) => exprs.mk_prefixes(deriv[0]),
                     Expr::Repeat(_, e, min, max) => {
                         let max = if max == u32::MAX {
                             u32::MAX

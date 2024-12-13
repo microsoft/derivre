@@ -78,10 +78,6 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
-    /// Empty string plus all prefixes of the words matched by the regex (including the
-    /// words matched themselves).
-    /// Always includes empty string.
-    Prefixes(Box<RegexAst>),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,
     /// Matches nothing. Same as Or([]).
@@ -111,10 +107,9 @@ impl RegexAst {
     pub fn get_args(&self) -> &[RegexAst] {
         match self {
             RegexAst::And(asts) | RegexAst::Or(asts) | RegexAst::Concat(asts) => asts,
-            RegexAst::LookAhead(ast)
-            | RegexAst::Not(ast)
-            | RegexAst::Repeat(ast, _, _)
-            | RegexAst::Prefixes(ast) => std::slice::from_ref(ast),
+            RegexAst::LookAhead(ast) | RegexAst::Not(ast) | RegexAst::Repeat(ast, _, _) => {
+                std::slice::from_ref(ast)
+            }
             RegexAst::EmptyString
             | RegexAst::NoMatch
             | RegexAst::Regex(_)
@@ -140,7 +135,6 @@ impl RegexAst {
             RegexAst::ByteLiteral(_) => "ByteLiteral",
             RegexAst::ExprRef(_) => "ExprRef",
             RegexAst::Repeat(_, _, _) => "Repeat",
-            RegexAst::Prefixes(_) => "Prefixes",
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
         }
@@ -196,7 +190,7 @@ impl RegexAst {
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
                 }
-                RegexAst::EmptyString | RegexAst::NoMatch | RegexAst::Prefixes(_) => {}
+                RegexAst::EmptyString | RegexAst::NoMatch => {}
             }
             for c in ast.get_args().iter().rev() {
                 todo.push(Some(c));
@@ -377,8 +371,6 @@ impl RegexBuilder {
             );
         }
 
-        let mut error = "";
-
         let r = self.exprset.simple_map(e, |exprset, args, e| -> ExprRef {
             match exprset.get(e) {
                 Expr::EmptyString => ExprRef::EMPTY_STRING,
@@ -406,12 +398,6 @@ impl RegexBuilder {
                     }
                 }
                 Expr::And(_, _) => exprset.mk_and(args),
-                Expr::Prefixes(_, _) => {
-                    if error.is_empty() {
-                        error = "prefixes";
-                    }
-                    exprset.mk_prefixes(args[0])
-                }
                 Expr::Or(_, _) => exprset.mk_or(args),
                 Expr::Concat(_, _) => exprset.mk_concat(args),
                 Expr::Not(_, _) => exprset.mk_not(args[0]),
@@ -420,20 +406,13 @@ impl RegexBuilder {
             }
         });
 
-        if error.is_empty() {
-            let quote = self.exprset.mk_byte(b'"');
-            let r = if options.raw_mode {
-                r
-            } else {
-                self.exprset.mk_concat(vec![quote, r, quote])
-            };
-            Ok(r)
+        let quote = self.exprset.mk_byte(b'"');
+        let r = if options.raw_mode {
+            r
         } else {
-            Err(anyhow::anyhow!(
-                "unsupported node when JSON-quoting: {}",
-                error
-            ))
-        }
+            self.exprset.mk_concat(vec![quote, r, quote])
+        };
+        Ok(r)
     }
 
     pub fn mk_regex(&mut self, s: &str) -> Result<ExprRef> {
@@ -489,7 +468,6 @@ impl RegexBuilder {
                     RegexAst::Repeat(_, min, max) => {
                         self.exprset.mk_repeat(new_args[0], *min, *max)
                     }
-                    RegexAst::Prefixes(_) => self.exprset.mk_prefixes(new_args[0]),
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {
                         ensure!(

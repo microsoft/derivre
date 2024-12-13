@@ -46,7 +46,6 @@ pub enum Expr<'a> {
     Concat(ExprFlags, &'a [ExprRef]),
     Or(ExprFlags, &'a [ExprRef]),
     And(ExprFlags, &'a [ExprRef]),
-    Prefixes(ExprFlags, ExprRef),
 }
 
 #[derive(Clone, Copy)]
@@ -95,7 +94,6 @@ pub enum ExprTag {
     Lookahead,
     Not,
     Repeat,
-    Prefixes,
     Concat,
     Or,
     And, // has to be last, see below
@@ -181,10 +179,9 @@ impl<'a> Expr<'a> {
     pub fn args(&self) -> &[ExprRef] {
         match self {
             Expr::Concat(_, es) | Expr::Or(_, es) | Expr::And(_, es) => es,
-            Expr::Lookahead(_, e, _)
-            | Expr::Not(_, e)
-            | Expr::Repeat(_, e, _, _)
-            | Expr::Prefixes(_, e) => std::slice::from_ref(e),
+            Expr::Lookahead(_, e, _) | Expr::Not(_, e) | Expr::Repeat(_, e, _, _) => {
+                std::slice::from_ref(e)
+            }
             Expr::EmptyString | Expr::NoMatch | Expr::Byte(_) | Expr::ByteSet(_) => &[],
         }
     }
@@ -198,7 +195,6 @@ impl<'a> Expr<'a> {
             Expr::Lookahead(f, _, _) => *f,
             Expr::Not(f, _) => *f,
             Expr::Repeat(f, _, _, _) => *f,
-            Expr::Prefixes(f, _) => *f,
             Expr::Concat(f, _) => *f,
             Expr::Or(f, _) => *f,
             Expr::And(f, _) => *f,
@@ -220,7 +216,6 @@ impl<'a> Expr<'a> {
             ExprTag::Lookahead => Expr::Lookahead(flags, ExprRef::new(s[1]), s[2]),
             ExprTag::Not => Expr::Not(flags, ExprRef::new(s[1])),
             ExprTag::Repeat => Expr::Repeat(flags, ExprRef::new(s[1]), s[2], s[3]),
-            ExprTag::Prefixes => Expr::Prefixes(flags, ExprRef::new(s[1])),
             ExprTag::Concat => Expr::Concat(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::Or => Expr::Or(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::And => Expr::And(flags, bytemuck::cast_slice(&s[1..])),
@@ -251,7 +246,6 @@ impl<'a> Expr<'a> {
             Expr::Repeat(flags, e, a, b) => {
                 trg.push_slice(&[flags.encode(ExprTag::Repeat), e.0, *a, *b])
             }
-            Expr::Prefixes(flags, e) => trg.push_slice(&[flags.encode(ExprTag::Prefixes), e.0]),
             Expr::Concat(flags, es) => nary_serialize(trg, flags.encode(ExprTag::Concat), es),
             Expr::Or(flags, es) => nary_serialize(trg, flags.encode(ExprTag::Or), es),
             Expr::And(flags, es) => nary_serialize(trg, flags.encode(ExprTag::And), es),
@@ -443,9 +437,7 @@ impl ExprSet {
         let tag = ExprTag::from_u8((s[0] & 0xff) as u8);
         match tag {
             ExprTag::Concat | ExprTag::Or | ExprTag::And => bytemuck::cast_slice(&s[1..]),
-            ExprTag::Not | ExprTag::Repeat | ExprTag::Lookahead | ExprTag::Prefixes => {
-                bytemuck::cast_slice(&s[1..2])
-            }
+            ExprTag::Not | ExprTag::Repeat | ExprTag::Lookahead => bytemuck::cast_slice(&s[1..2]),
             ExprTag::EmptyString | ExprTag::NoMatch | ExprTag::Byte | ExprTag::ByteSet => &[],
         }
     }

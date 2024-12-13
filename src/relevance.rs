@@ -199,11 +199,6 @@ impl RelevanceCache {
                         simplify(exprs, negated_deriv)
                     }
 
-                    Expr::Prefixes(_, _) => deriv[0]
-                        .iter()
-                        .map(|(b, r)| (*b, exprs.mk_prefixes(*r)))
-                        .collect(),
-
                     Expr::Repeat(_, e, min, max) => {
                         let max = if max == u32::MAX {
                             u32::MAX
@@ -314,7 +309,7 @@ impl RelevanceCache {
                 return Some(true);
             }
             match exprs.get(b) {
-                Expr::Prefixes(_, big) => {
+                Expr::Not(_, big) => { // PRTODO
                     // we're checking small ⊆ big, which is
                     //   small & ~prefixes(big) = empty
                     if let Some((main, except)) = a_and_not_b(exprs, big) {
@@ -356,9 +351,9 @@ impl RelevanceCache {
             return Ok(*r);
         }
 
-        if let Some(r) = self.quick_empty(exprs, top_expr) {
-            self.relevance_cache.insert(top_expr, !r);
-            return Ok(!r);
+        if let Some(_r) = self.quick_empty(exprs, top_expr) {
+            //self.relevance_cache.insert(top_expr, !r);
+            //return Ok(!r);
         }
 
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
