@@ -5,7 +5,12 @@ use std::{
 
 use anyhow::Result;
 
-use crate::ast::{Expr, ExprRef, ExprSet};
+use crate::{
+    ast::{Expr, ExprRef, ExprSet},
+    nextbyte::next_byte_simple,
+    raw::DerivCache,
+    NextByte,
+};
 
 // This is map (ByteSet => RegExp); ByteSet is Expr::Byte or Expr::ByteSet,
 // and expresses the condition; RegExp is the derivative under that condition.
@@ -247,26 +252,58 @@ impl RelevanceCache {
             .unwrap()
     }
 
-    // check if
-    //   small ⊆ Prefixes((main & ~except) suffix)
-    fn except_keywords(
+    fn check_contains(
         &mut self,
         exprs: &mut ExprSet,
         small: ExprRef,
-        main: ExprRef,
-        except: ExprRef,
-        _suffix: ExprRef,
-    ) -> Option<bool> {
+        big: ExprRef,
+    ) -> Result<bool> {
+        if small == big {
+            return Ok(true);
+        }
+        let not_big = exprs.mk_not(big);
+        let cont = exprs.mk_and2(small, not_big);
+        Ok(self.is_non_empty_inner(exprs, cont)? == false)
+    }
+
+    pub fn is_contained_in_prefixes(
+        &mut self,
+        exprs: &mut ExprSet,
+        deriv: &mut DerivCache,
+        mut small: ExprRef,
+        mut big: ExprRef,
+        max_fuel: u64,
+    ) -> Result<bool> {
+        self.max_fuel = max_fuel;
+        self.cost_limit = exprs.cost().saturating_add(max_fuel);
+
+        // rewind through any initial forced bytes
+        for _ in 0..10 {
+            match next_byte_simple(exprs, small) {
+                NextByte::ForcedByte(b) => {
+                    small = deriv.derivative(exprs, small, b);
+                    big = deriv.derivative(exprs, big, b);
+                }
+                _ => break,
+            }
+        }
+
+        // split big into main & ~except
+        let (main, except) = a_and_not_b(exprs, big).unwrap_or((big, ExprRef::NO_MATCH));
+        // if (main, except) are of the form (main suffix, except suffix), then
+        // strip the suffix
+        let (main, except) = strip_common_suffix(exprs, main, except);
+
         match (exprs.get(small), exprs.get(main)) {
             (Expr::Repeat(_, small_ch, _, small_high), Expr::Repeat(_, main_ch, _, main_high))
-                if small_high <= main_high && 2 < main_high =>
+                if small_high <= main_high && 2 <= main_high =>
             {
                 if !or_branches(exprs, &[except])
                     .iter()
                     .all(|c| simple_length(exprs, *c).unwrap_or(usize::MAX) < main_high as usize)
                 {
                     println!(" -> len, nonempty");
-                    return None;
+                    return Ok(false);
                 }
 
                 println!(
@@ -275,61 +312,21 @@ impl RelevanceCache {
                     exprs.expr_to_string(main_ch)
                 );
 
-                if !self.check_contains(exprs, small_ch, main_ch) {
-                    println!(" -> rec, nonempty");
-                    return None;
-                } else {
+                if self.check_contains(exprs, small_ch, main_ch)? {
                     println!(" -> rec, empty");
+                } else {
+                    println!(" -> rec, nonempty");
+                    return Ok(false);
                 }
 
                 println!(" -> empty");
-                return Some(true);
+                Ok(true)
             }
             _ => {
                 println!(" -> no repeat");
-                None
+                Ok(false)
             }
         }
-    }
-
-    fn check_contains(&mut self, exprs: &mut ExprSet, small: ExprRef, big: ExprRef) -> bool {
-        if small == big {
-            return true;
-        }
-        let cont = exprs.mk_contains(small, big);
-        self.is_non_empty_inner(exprs, cont).unwrap_or(true) == false
-    }
-
-    fn quick_empty(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> Option<bool> {
-        println!("checking empty: {}", exprs.expr_to_string(top_expr));
-
-        if let Some((small, b)) = a_and_not_b(exprs, top_expr) {
-            if small == b {
-                println!(" -> eq, empty");
-                return Some(true);
-            }
-            match exprs.get(b) {
-                Expr::Not(_, big) => { // PRTODO
-                    // we're checking small ⊆ big, which is
-                    //   small & ~prefixes(big) = empty
-                    if let Some((main, except)) = a_and_not_b(exprs, big) {
-                        // here, big = main & ~except
-                        match (exprs.get(main), exprs.get(except)) {
-                            (Expr::Concat(_, [main, suff0]), Expr::Concat(_, [except, suff2]))
-                                if suff0 == suff2 =>
-                            {
-                                return self.except_keywords(exprs, small, *main, *except, *suff0);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        println!(" -> no match");
-        return None;
     }
 
     pub fn is_non_empty_limited(
@@ -349,11 +346,6 @@ impl RelevanceCache {
         }
         if let Some(r) = self.relevance_cache.get(&top_expr) {
             return Ok(*r);
-        }
-
-        if let Some(_r) = self.quick_empty(exprs, top_expr) {
-            //self.relevance_cache.insert(top_expr, !r);
-            //return Ok(!r);
         }
 
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
@@ -441,6 +433,7 @@ fn or_branches<'a>(exprs: &'a ExprSet, e: &'a [ExprRef]) -> &'a [ExprRef] {
     assert!(e.len() == 1);
     match exprs.get(e[0]) {
         Expr::Or(_, args) => args,
+        Expr::NoMatch => &[],
         _ => e,
     }
 }
@@ -461,5 +454,12 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
             Some(sum)
         }
         _ => None,
+    }
+}
+
+fn strip_common_suffix(exprs: &ExprSet, a: ExprRef, b: ExprRef) -> (ExprRef, ExprRef) {
+    match (exprs.get(a), exprs.get(b)) {
+        (Expr::Concat(_, [a0, a1]), Expr::Concat(_, [b0, b1])) if a1 == b1 => (*a0, *b0),
+        _ => (a, b),
     }
 }

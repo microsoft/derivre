@@ -380,9 +380,13 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_contains(&mut self, a: ExprRef, b: ExprRef) -> ExprRef {
-        let args = vec![a, self.mk_not(b)];
-        self.mk_and(args)
+    // this avoids allocation when hitting the hash-cons
+    pub(crate) fn mk_and2(&mut self, a: ExprRef, b: ExprRef) -> ExprRef {
+        self.pay(2);
+        let (a, b) = if a < b { (a, b) } else { (b, a) };
+        let nullable = self.is_nullable(a) && self.is_nullable(b);
+        let flags = ExprFlags::from_nullable_positive(nullable, nullable);
+        self.mk(Expr::And(flags, &[a, b]))
     }
 
     pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {

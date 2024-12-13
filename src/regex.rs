@@ -402,18 +402,32 @@ impl AlphabetInfo {
 
 // private implementation
 impl Regex {
-    pub(crate) fn new_with_exprset(
+    pub fn is_contained_in_prefixes(
         exprset: &ExprSet,
-        top_rx: ExprRef,
+        small: ExprRef,
+        big: ExprRef,
         relevance_fuel: u64,
-    ) -> Result<Self> {
-        let (alpha, exprset, rx_list) = AlphabetInfo::from_exprset(exprset, &[top_rx]);
-        let top_rx = rx_list[0];
+    ) -> Result<bool> {
+        let (mut slf, rxes) = Self::prep_regex(exprset, &[small, big]);
+        let small = rxes[0];
+        let big = rxes[0];
+
+        slf.relevance.is_contained_in_prefixes(
+            &mut slf.exprs,
+            &mut slf.deriv,
+            small,
+            big,
+            relevance_fuel,
+        )
+    }
+
+    fn prep_regex(exprset: &ExprSet, top_rxs: &[ExprRef]) -> (Self, Vec<ExprRef>) {
+        let (alpha, exprset, rx_list) = AlphabetInfo::from_exprset(exprset, top_rxs);
         let num_ast_nodes = exprset.len();
 
         let rx_sets = StateID::new_hash_cons();
 
-        let mut r = Regex {
+        let mut slf = Regex {
             deriv: DerivCache::new(),
             next_byte: NextByteCache::new(),
             relevance: RelevanceCache::new(),
@@ -434,11 +448,23 @@ impl Regex {
         };
 
         // DEAD
-        r.append_state(desc.clone());
+        slf.append_state(desc.clone());
         // also append state for the "MISSING"
-        r.append_state(desc);
+        slf.append_state(desc);
         // in fact, transition from MISSING and DEAD should both lead to DEAD
-        r.state_table.fill(StateID::DEAD);
+        slf.state_table.fill(StateID::DEAD);
+        assert!(slf.alpha.len() > 0);
+
+        (slf, rx_list)
+    }
+
+    pub(crate) fn new_with_exprset(
+        exprset: &ExprSet,
+        top_rx: ExprRef,
+        relevance_fuel: u64,
+    ) -> Result<Self> {
+        let (mut r, top_rx) = Self::prep_regex(exprset, &[top_rx]);
+        let top_rx = top_rx[0];
 
         if r.relevance
             .is_non_empty_limited(&mut r.exprs, top_rx, relevance_fuel)?
@@ -448,7 +474,6 @@ impl Regex {
             r.initial = StateID::DEAD;
         }
 
-        assert!(r.alpha.len() > 0);
         Ok(r)
     }
 

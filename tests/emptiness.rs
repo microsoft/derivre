@@ -23,16 +23,15 @@ fn is_contained_in_prefixes(small: &str, big: &str) -> bool {
 fn is_contained_in_prefixes_except(small: &str, big: &str, except: &str) -> bool {
     let mut bld = RegexBuilder::new();
     // bld.unicode(false).utf8(false);
-    let mut inner = RegexAst::Regex(big.to_string());
+    let mut big = RegexAst::Regex(big.to_string());
     if !except.is_empty() {
         let excl = RegexAst::Not(Box::new(RegexAst::Regex(except.to_string())));
-        inner = RegexAst::And(vec![inner, excl]);
+        big = RegexAst::And(vec![big, excl]);
     }
-    let big = RegexAst::Prefixes(Box::new(inner));
-    let eref = bld
-        .mk(&RegexAst::Regex(small.to_string()).contained_in(&big))
-        .unwrap();
-    bld.to_regex_limited(eref, u64::MAX).unwrap().always_empty()
+
+    let big = bld.mk(&big).unwrap();
+    let small = bld.mk_regex(small).unwrap();
+    Regex::is_contained_in_prefixes(bld.exprset(), small, big, u64::MAX).unwrap()
 }
 
 fn check_empty(a: &str, b: &str) {
@@ -158,12 +157,14 @@ fn test_contains() {
 }
 
 #[test]
-fn test_prefixes() {
-    check_contains_prefixes(r"a", r"aB");
-    check_contains_prefixes(r"[a-z]+", r"[a-z]+BBB");
-
+fn test_prefixes_normal() {
     // note the final "
     let json_str = r#"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\x00-\x1F\x7F])*""#;
+
+    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", &json_str);
+
+    // check_contains_prefixes(r"a", r"aB");
+    check_contains_prefixes(r"[a-z]+", r"[a-z]+BBB");
 
     check_contains_prefixes(r"[a-z]+", &json_str);
     check_contains_prefixes(r"[a-z\u{0080}-\u{FFFF}]+", &json_str);

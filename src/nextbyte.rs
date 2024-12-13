@@ -7,7 +7,7 @@ pub struct NextByteCache {
     next_byte_cache: HashMap<ExprRef, NextByte>,
 }
 
-fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
+pub(crate) fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
     loop {
         match exprs.get(r) {
             Expr::EmptyString => return NextByte::ForcedEOI,
