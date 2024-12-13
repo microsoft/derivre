@@ -35,6 +35,7 @@ macro_rules! debug {
 #[derive(Clone)]
 pub struct RelevanceCache {
     relevance_cache: HashMap<ExprRef, bool>,
+    containment_cache: HashMap<(ExprRef, ExprRef), bool>,
     sym_deriv: HashMap<ExprRef, SymRes>,
     max_fuel: u64,
     cost_limit: u64,
@@ -130,6 +131,7 @@ impl RelevanceCache {
         RelevanceCache {
             relevance_cache: HashMap::default(),
             sym_deriv: HashMap::default(),
+            containment_cache: HashMap::default(),
             cost_limit: u64::MAX,
             max_fuel: u64::MAX,
         }
@@ -266,17 +268,13 @@ impl RelevanceCache {
         Ok(self.is_non_empty_inner(exprs, cont)? == false)
     }
 
-    pub fn is_contained_in_prefixes(
+    fn is_contained_in_prefixes_inner(
         &mut self,
         exprs: &mut ExprSet,
         deriv: &mut DerivCache,
         mut small: ExprRef,
         mut big: ExprRef,
-        max_fuel: u64,
     ) -> Result<bool> {
-        self.max_fuel = max_fuel;
-        self.cost_limit = exprs.cost().saturating_add(max_fuel);
-
         debug!(
             "check contained {} in {}",
             exprs.expr_to_string(small),
@@ -331,6 +329,40 @@ impl RelevanceCache {
             _ => {
                 debug!(" -> no repeat");
                 Ok(false)
+            }
+        }
+    }
+
+    /// Check if `small` is contained in `big` with a limit on the number of steps.
+    /// If `cache_failures` is true, then the result of the check is cached,
+    /// as `false` in case of error (so future checks will return false not error,
+    /// even if max_fuel is increased).
+    pub fn is_contained_in_prefixes(
+        &mut self,
+        exprs: &mut ExprSet,
+        deriv: &mut DerivCache,
+        small: ExprRef,
+        big: ExprRef,
+        max_fuel: u64,
+        cache_failures: bool,
+    ) -> Result<bool> {
+        if let Some(r) = self.containment_cache.get(&(small, big)) {
+            return Ok(*r);
+        }
+
+        self.max_fuel = max_fuel;
+        self.cost_limit = exprs.cost().saturating_add(max_fuel);
+
+        match self.is_contained_in_prefixes_inner(exprs, deriv, small, big) {
+            Ok(r) => {
+                self.containment_cache.insert((small, big), r);
+                Ok(r)
+            }
+            Err(e) => {
+                if cache_failures {
+                    self.containment_cache.insert((small, big), false);
+                }
+                Err(e)
             }
         }
     }

@@ -418,6 +418,7 @@ impl Regex {
             small,
             big,
             relevance_fuel,
+            false,
         )
     }
 
