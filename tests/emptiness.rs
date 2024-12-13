@@ -190,9 +190,17 @@ fn test_prefixes_normal() {
 fn test_prefixes_except() {
     check_not_contains_prefixes_except(r"f", "fQ", r#"fQ"#);
 
-    // check_not_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(fooxx|bar)Q"#);
-    // check_contains_prefixes_except(r"[a-z]+", "[a-zB]+Q", r#"(foo|bar)Q"#);
-    // check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foo|bar)Q"#); // quick
-    // check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(foo|bar)Q"#); // slow
-    // check_contains_prefixes_except(r"[a-z]+", "[a-zB]+", r#"(foo|bar)"#);
+    check_contains_prefixes_except(r"[a-z]+", "[a-zB]+Q", r#"(foo|bar)Q"#);
+    check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foox|bar)Q"#);
+    check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(foox|bar)Q"#);
+    check_not_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(fooxx|bar)Q"#);
+    check_contains_prefixes_except(r"[a-z]+", "[a-zB]+", r#"(foo|bar)"#);
+
+    check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(fooQ|barQ)"#);
+    // we're not smart enough to factor Q out of the expression, so this one may be fixed in future
+    check_not_contains_prefixes_except(r"[a-z]{0,4}", "[a-zB]{0,4}Q", r#"(fooQ|barQ)"#);
+    // but this one should fail
+    check_not_contains_prefixes_except(r"[a-z]{0,4}", "[a-zB]{0,4}Q", r#"(foozQ|barQ)"#);
+
+    check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foo|bar)M"#);
 }

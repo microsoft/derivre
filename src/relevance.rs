@@ -448,6 +448,17 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
     match exprs.get(e) {
         Expr::ByteSet(_) | Expr::Byte(_) => Some(1),
         Expr::EmptyString => Some(0),
+        Expr::Or(_, args) => {
+            let mut mx = 0;
+            for a in args {
+                if let Some(l) = simple_length(exprs, *a) {
+                    mx = mx.max(l);
+                } else {
+                    return None;
+                }
+            }
+            Some(mx)
+        }
         Expr::Concat(_, args) => {
             let mut sum = 0;
             for a in args {
@@ -466,7 +477,7 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
 fn strip_common_suffix(exprs: &ExprSet, a: ExprRef, b: ExprRef) -> (ExprRef, ExprRef) {
     match (exprs.get(a), exprs.get(b)) {
         (Expr::Concat(_, [a0, a1]), Expr::Concat(_, [b0, b1])) if a1 == b1 => (*a0, *b0),
-        (Expr::Concat(_, arr), Expr::NoMatch) => (arr[0], b),
+        (Expr::Concat(_, arr), _) => (arr[0], b),
         _ => (a, b),
     }
 }
