@@ -410,7 +410,7 @@ impl Regex {
     ) -> Result<bool> {
         let (mut slf, rxes) = Self::prep_regex(exprset, &[small, big]);
         let small = rxes[0];
-        let big = rxes[0];
+        let big = rxes[1];
 
         slf.relevance.is_contained_in_prefixes(
             &mut slf.exprs,

@@ -22,7 +22,7 @@ use crate::{
 // There is an implicit Sn+1 = Σ \ ⋃Si with Cn+1 = NO_MATCH
 type SymRes = Vec<(ExprRef, ExprRef)>;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 macro_rules! debug {
     ($($arg:tt)*) => {
         if DEBUG {
@@ -277,6 +277,12 @@ impl RelevanceCache {
         self.max_fuel = max_fuel;
         self.cost_limit = exprs.cost().saturating_add(max_fuel);
 
+        debug!(
+            "check contained {} in {}",
+            exprs.expr_to_string(small),
+            exprs.expr_to_string(big)
+        );
+
         // rewind through any initial forced bytes
         for _ in 0..10 {
             match next_byte_simple(exprs, small) {
@@ -302,28 +308,28 @@ impl RelevanceCache {
                     .iter()
                     .all(|c| simple_length(exprs, *c).unwrap_or(usize::MAX) < main_high as usize)
                 {
-                    println!(" -> len, nonempty");
+                    debug!(" -> len, nonempty");
                     return Ok(false);
                 }
 
-                println!(
+                debug!(
                     "check {} in {}",
                     exprs.expr_to_string(small_ch),
                     exprs.expr_to_string(main_ch)
                 );
 
                 if self.check_contains(exprs, small_ch, main_ch)? {
-                    println!(" -> rec, empty");
+                    debug!(" -> rec, empty");
                 } else {
-                    println!(" -> rec, nonempty");
+                    debug!(" -> rec, nonempty");
                     return Ok(false);
                 }
 
-                println!(" -> empty");
+                debug!(" -> empty");
                 Ok(true)
             }
             _ => {
-                println!(" -> no repeat");
+                debug!(" -> no repeat");
                 Ok(false)
             }
         }
@@ -460,6 +466,7 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
 fn strip_common_suffix(exprs: &ExprSet, a: ExprRef, b: ExprRef) -> (ExprRef, ExprRef) {
     match (exprs.get(a), exprs.get(b)) {
         (Expr::Concat(_, [a0, a1]), Expr::Concat(_, [b0, b1])) if a1 == b1 => (*a0, *b0),
+        (Expr::Concat(_, arr), Expr::NoMatch) => (arr[0], b),
         _ => (a, b),
     }
 }
