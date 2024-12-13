@@ -394,6 +394,11 @@ impl ExprSet {
         }
     }
 
+    pub fn mk_contains(&mut self, a: ExprRef, b: ExprRef) -> ExprRef {
+        let args = vec![a, self.mk_not(b)];
+        self.mk_and(args)
+    }
+
     pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
         args = self.flatten_tag(ExprTag::And, args);
         self.pay(2 * args.len());

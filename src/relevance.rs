@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    usize,
+};
 
 use anyhow::Result;
 
@@ -14,7 +17,7 @@ use crate::ast::{Expr, ExprRef, ExprSet};
 // There is an implicit Sn+1 = Σ \ ⋃Si with Cn+1 = NO_MATCH
 type SymRes = Vec<(ExprRef, ExprRef)>;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 macro_rules! debug {
     ($($arg:tt)*) => {
         if DEBUG {
@@ -28,6 +31,8 @@ macro_rules! debug {
 pub struct RelevanceCache {
     relevance_cache: HashMap<ExprRef, bool>,
     sym_deriv: HashMap<ExprRef, SymRes>,
+    max_fuel: u64,
+    cost_limit: u64,
 }
 
 fn swap_each<A: Copy>(v: &mut Vec<(A, A)>) {
@@ -120,6 +125,8 @@ impl RelevanceCache {
         RelevanceCache {
             relevance_cache: HashMap::default(),
             sym_deriv: HashMap::default(),
+            cost_limit: u64::MAX,
+            max_fuel: u64::MAX,
         }
     }
 
@@ -151,6 +158,11 @@ impl RelevanceCache {
                                 for (b1, r1) in &other {
                                     let b = exprs.mk_byte_set_and(*b0, *b1);
                                     if b != ExprRef::NO_MATCH {
+                                        debug!(
+                                            "  and: {} & {}",
+                                            exprs.expr_to_string(*r0),
+                                            exprs.expr_to_string(*r1)
+                                        );
                                         let r = exprs.mk_and(vec![*r0, *r1]);
                                         if r != ExprRef::NO_MATCH {
                                             new_acc.push((b, r));
@@ -240,12 +252,103 @@ impl RelevanceCache {
             .unwrap()
     }
 
+    // check if
+    //   small ⊆ Prefixes((main & ~except) suffix)
+    fn except_keywords(
+        &mut self,
+        exprs: &mut ExprSet,
+        small: ExprRef,
+        main: ExprRef,
+        except: ExprRef,
+        _suffix: ExprRef,
+    ) -> Option<bool> {
+        match (exprs.get(small), exprs.get(main)) {
+            (Expr::Repeat(_, small_ch, _, small_high), Expr::Repeat(_, main_ch, _, main_high))
+                if small_high <= main_high && 2 < main_high =>
+            {
+                if !or_branches(exprs, &[except])
+                    .iter()
+                    .all(|c| simple_length(exprs, *c).unwrap_or(usize::MAX) < main_high as usize)
+                {
+                    println!(" -> len, nonempty");
+                    return None;
+                }
+
+                println!(
+                    "check {} in {}",
+                    exprs.expr_to_string(small_ch),
+                    exprs.expr_to_string(main_ch)
+                );
+
+                if !self.check_contains(exprs, small_ch, main_ch) {
+                    println!(" -> rec, nonempty");
+                    return None;
+                } else {
+                    println!(" -> rec, empty");
+                }
+
+                println!(" -> empty");
+                return Some(true);
+            }
+            _ => {
+                println!(" -> no repeat");
+                None
+            }
+        }
+    }
+
+    fn check_contains(&mut self, exprs: &mut ExprSet, small: ExprRef, big: ExprRef) -> bool {
+        if small == big {
+            return true;
+        }
+        let cont = exprs.mk_contains(small, big);
+        self.is_non_empty_inner(exprs, cont).unwrap_or(true) == false
+    }
+
+    fn quick_empty(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> Option<bool> {
+        println!("checking empty: {}", exprs.expr_to_string(top_expr));
+
+        if let Some((small, b)) = a_and_not_b(exprs, top_expr) {
+            if small == b {
+                println!(" -> eq, empty");
+                return Some(true);
+            }
+            match exprs.get(b) {
+                Expr::Prefixes(_, big) => {
+                    // we're checking small ⊆ big, which is
+                    //   small & ~prefixes(big) = empty
+                    if let Some((main, except)) = a_and_not_b(exprs, big) {
+                        // here, big = main & ~except
+                        match (exprs.get(main), exprs.get(except)) {
+                            (Expr::Concat(_, [main, suff0]), Expr::Concat(_, [except, suff2]))
+                                if suff0 == suff2 =>
+                            {
+                                return self.except_keywords(exprs, small, *main, *except, *suff0);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        println!(" -> no match");
+        return None;
+    }
+
     pub fn is_non_empty_limited(
         &mut self,
         exprs: &mut ExprSet,
         top_expr: ExprRef,
         max_fuel: u64,
     ) -> Result<bool> {
+        self.max_fuel = max_fuel;
+        self.cost_limit = exprs.cost().saturating_add(max_fuel);
+        self.is_non_empty_inner(exprs, top_expr)
+    }
+
+    fn is_non_empty_inner(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> Result<bool> {
         if exprs.is_positive(top_expr) {
             return Ok(true);
         }
@@ -253,11 +356,15 @@ impl RelevanceCache {
             return Ok(*r);
         }
 
+        if let Some(r) = self.quick_empty(exprs, top_expr) {
+            self.relevance_cache.insert(top_expr, !r);
+            return Ok(!r);
+        }
+
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
         let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
         let mut pending = HashSet::new();
         let mut front_wave = vec![top_expr];
-        let c0 = exprs.cost();
         pending.insert(top_expr);
 
         debug!("\nstart relevance: {}", exprs.expr_to_string(top_expr));
@@ -316,10 +423,48 @@ impl RelevanceCache {
             }
 
             anyhow::ensure!(
-                exprs.cost() - c0 <= max_fuel,
+                exprs.cost() <= self.cost_limit,
                 "maximum relevance check fuel {} exceeded",
-                max_fuel
+                self.max_fuel
             );
         }
+    }
+}
+
+fn a_and_not_b(exprs: &ExprSet, e: ExprRef) -> Option<(ExprRef, ExprRef)> {
+    match exprs.get(e) {
+        Expr::And(_, [a1, a2]) => match (exprs.get(*a1), exprs.get(*a2)) {
+            (Expr::Not(_, a), _) => Some((*a2, a)),
+            (_, Expr::Not(_, a)) => Some((*a1, a)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn or_branches<'a>(exprs: &'a ExprSet, e: &'a [ExprRef]) -> &'a [ExprRef] {
+    assert!(e.len() == 1);
+    match exprs.get(e[0]) {
+        Expr::Or(_, args) => args,
+        _ => e,
+    }
+}
+
+fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
+    match exprs.get(e) {
+        Expr::ByteSet(_) | Expr::Byte(_) => Some(1),
+        Expr::EmptyString => Some(0),
+        Expr::Concat(_, args) => {
+            let mut sum = 0;
+            for a in args {
+                if let Some(l) = simple_length(exprs, *a) {
+                    sum += l;
+                } else {
+                    return None;
+                }
+            }
+            Some(sum)
+        }
+        _ => None,
     }
 }

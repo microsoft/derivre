@@ -89,6 +89,12 @@ fn check_contains_prefixes_except(small: &str, big: &str, except: &str) {
     }
 }
 
+fn check_not_contains_prefixes_except(small: &str, big: &str, except: &str) {
+    if is_contained_in_prefixes_except(small, big, except) {
+        panic!("{} is contained in {} - {}", small, big, except);
+    }
+}
+
 fn check_not_contains_prefixes(small: &str, big: &str) {
     if is_contained_in_prefixes(small, big) {
         panic!("{} is contained in {}", small, big);
@@ -176,4 +182,15 @@ fn test_prefixes() {
 
     check_contains_prefixes_except(r"[abc]+", "[abcd]+Q", r#"aQ"#);
     check_contains_prefixes_except(r"[a-z]+", &json_str, r#"(foo|bar)""#);
+}
+
+#[test]
+fn test_prefixes_except() {
+    check_not_contains_prefixes_except(r"f", "fQ", r#"fQ"#);
+
+    // check_not_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(fooxx|bar)Q"#);
+    // check_contains_prefixes_except(r"[a-z]+", "[a-zB]+Q", r#"(foo|bar)Q"#);
+    // check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foo|bar)Q"#); // quick
+    // check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,5}Q", r#"(foo|bar)Q"#); // slow
+    // check_contains_prefixes_except(r"[a-z]+", "[a-zB]+", r#"(foo|bar)"#);
 }
