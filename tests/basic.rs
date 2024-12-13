@@ -410,3 +410,28 @@ fn test_json_uxxxx() {
         }
     }
 }
+
+#[test]
+fn test_json_and() {
+    let mut b = RegexBuilder::new();
+    let options = JsonQuoteOptions::with_unicode();
+
+    let e0 = b.mk_regex_and(&["[a-z]+", "(foo|bar|Baz)"]).unwrap();
+    let e = b.json_quote(e0, &options).unwrap();
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, &["foo", "bar"]);
+    no_match_many(&mut rx, &["xoo", "Baz"]);
+
+    let e0 = b.mk_regex_and(&["[a-z\n]+", "(foo\n|bar|Baz)"]).unwrap();
+    let e = b.json_quote(e0, &options).unwrap();
+    let mut rx = b.to_regex(e);
+    match_many(&mut rx, &["foo\\n", "bar"]);
+    no_match_many(&mut rx, &["foo\n", "xoo", "Baz"]);
+
+    // contained_in(a,b) == a & ~b
+    let e0 = b.mk_contained_in("[a-z\n]+", "(foo\n|bar|Baz)").unwrap();
+    let e = b.json_quote(e0, &options).unwrap();
+    let mut rx = b.to_regex(e);
+    no_match_many(&mut rx, &["foo\\n", "q\n", "foo\\u000a", "bar", "Baz", "QUX"]);
+    match_many(&mut rx, &["foo", "fooo\\n", "baar"]);
+}

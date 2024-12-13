@@ -78,7 +78,7 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
-    /// Empty string plus all prefixes of the words matched by the regex (including the 
+    /// Empty string plus all prefixes of the words matched by the regex (including the
     /// words matched themselves).
     /// Always includes empty string.
     Prefixes(Box<RegexAst>),
@@ -405,12 +405,7 @@ impl RegexBuilder {
                         exprset.mk_byte(b)
                     }
                 }
-                Expr::And(_, _) => {
-                    if error.is_empty() {
-                        error = "and";
-                    }
-                    exprset.mk_and(args)
-                }
+                Expr::And(_, _) => exprset.mk_and(args),
                 Expr::Prefixes(_, _) => {
                     if error.is_empty() {
                         error = "prefixes";
@@ -419,12 +414,7 @@ impl RegexBuilder {
                 }
                 Expr::Or(_, _) => exprset.mk_or(args),
                 Expr::Concat(_, _) => exprset.mk_concat(args),
-                Expr::Not(_, _) => {
-                    if error.is_empty() {
-                        error = "not";
-                    }
-                    exprset.mk_not(args[0])
-                }
+                Expr::Not(_, _) => exprset.mk_not(args[0]),
                 Expr::Lookahead(_, _, _) => exprset.mk_lookahead(args[0], 0),
                 Expr::Repeat(_, _, min, max) => exprset.mk_repeat(args[0], min, max),
             }
@@ -449,6 +439,14 @@ impl RegexBuilder {
     pub fn mk_regex(&mut self, s: &str) -> Result<ExprRef> {
         let parser = self.parser_builder.build();
         self.exprset.parse_expr(parser, s)
+    }
+
+    pub fn mk_regex_and(&mut self, s: &[&str]) -> Result<ExprRef> {
+        let args = s
+            .iter()
+            .map(|s| Ok(RegexAst::ExprRef(self.mk_regex(s)?)))
+            .collect::<Result<Vec<_>>>()?;
+        self.mk(&RegexAst::And(args))
     }
 
     pub fn mk_contained_in(&mut self, small: &str, big: &str) -> Result<ExprRef> {
