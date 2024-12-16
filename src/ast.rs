@@ -5,6 +5,7 @@ use std::{
 
 use crate::{hashcons::VecHashCons, pp::PrettyPrinter};
 use bytemuck_derive::{Pod, Zeroable};
+use hashbrown::HashMap;
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -261,7 +262,7 @@ pub struct ExprSet {
     pub(crate) cost: u64,
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
-    pub(crate) unicode_cache: std::collections::HashMap<Vec<(char, char)>, ExprRef>,
+    pub(crate) unicode_cache: HashMap<Vec<(char, char)>, ExprRef>,
 }
 
 impl ExprSet {
@@ -275,7 +276,7 @@ impl ExprSet {
             cost: 0,
             pp: PrettyPrinter::new_simple(alphabet_size),
             optimize: true,
-            unicode_cache: std::collections::HashMap::new(),
+            unicode_cache: HashMap::new(),
         };
 
         let id = r.exprs.insert(&[]);
@@ -456,7 +457,7 @@ impl ExprSet {
         r: ExprRef,
         process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,
     ) -> V {
-        let mut cache = std::collections::HashMap::new();
+        let mut cache = HashMap::new();
         let concat_nullable_check = false;
         self.map(r, &mut cache, concat_nullable_check, |e| e, process)
     }
@@ -465,7 +466,7 @@ impl ExprSet {
     pub fn map<K: Eq + PartialEq + Hash, V: Clone>(
         &mut self,
         r: ExprRef,
-        cache: &mut std::collections::HashMap<K, V>,
+        cache: &mut HashMap<K, V>,
         concat_nullable_check: bool,
         mk_key: impl Fn(ExprRef) -> K,
         mut process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,

@@ -1,9 +1,8 @@
 // based on https://github.com/rust-lang/regex/blob/ddeb85eaa3bdf79d6306cc92a9d8bd89d839b5cd/regex-test/lib.rs
 
-use std::collections::HashSet;
-
 use anyhow::{bail, Context as _, Result};
 use bstr::{BString, ByteSlice, ByteVec as _};
+use hashbrown::HashSet;
 use serde::Deserialize;
 
 /*

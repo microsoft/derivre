@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use hashbrown::HashMap;
 
 use crate::{
     ast::{byteset_contains, byteset_set, Expr, ExprSet},

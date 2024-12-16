@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use std::fmt::Write as _;
+
+use hashbrown::HashMap;
 
 use crate::{
     ast::{byteset_256, byteset_contains, byteset_set, Expr, ExprSet},

@@ -1,9 +1,5 @@
-use std::{
-    collections::{HashMap, HashSet},
-    usize,
-};
-
 use anyhow::Result;
+use hashbrown::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, ExprRef, ExprSet},

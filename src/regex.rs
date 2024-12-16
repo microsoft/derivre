@@ -1,6 +1,7 @@
-use std::{collections::HashSet, fmt::Debug};
+use std::fmt::Debug;
 
 use anyhow::Result;
+use hashbrown::HashSet;
 
 use crate::{
     ast::{ExprRef, ExprSet, NextByte},
