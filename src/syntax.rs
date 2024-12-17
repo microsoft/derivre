@@ -82,7 +82,11 @@ impl ExprSet {
     fn handle_unicode_ranges(&mut self, u: &ClassUnicode) -> ExprRef {
         let mut root = TrieNode::new(TrieSelector::Byte(0));
 
-        let key = u.ranges().iter().map(|r| (r.start() ,r.end() )).collect::<Vec<_>>();
+        let key = u
+            .ranges()
+            .iter()
+            .map(|r| (r.start(), r.end()))
+            .collect::<Vec<_>>();
 
         if let Some(r) = self.unicode_cache.get(&key) {
             return *r;

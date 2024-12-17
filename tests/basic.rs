@@ -432,6 +432,9 @@ fn test_json_and() {
     let e0 = b.mk_contained_in("[a-z\n]+", "(foo\n|bar|Baz)").unwrap();
     let e = b.json_quote(e0, &options).unwrap();
     let mut rx = b.to_regex(e);
-    no_match_many(&mut rx, &["foo\\n", "q\n", "foo\\u000a", "bar", "Baz", "QUX"]);
+    no_match_many(
+        &mut rx,
+        &["foo\\n", "q\n", "foo\\u000a", "bar", "Baz", "QUX"],
+    );
     match_many(&mut rx, &["foo", "fooo\\n", "baar"]);
 }
