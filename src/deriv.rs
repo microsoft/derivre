@@ -37,6 +37,11 @@ impl DerivCache {
                     return ExprRef::NO_MATCH;
                 }
             }
+            // Expr::Repeat(_, e, _, _) => {
+            //     if exprs.get(e).surely_no_match(b) {
+            //         return ExprRef::NO_MATCH;
+            //     }
+            // }
             e => {
                 if e.surely_no_match(b) {
                     return ExprRef::NO_MATCH;
@@ -65,6 +70,9 @@ impl DerivCache {
                     Expr::Or(_, _) => exprs.mk_or(deriv),
                     Expr::Not(_, _) => exprs.mk_not(deriv[0]),
                     Expr::Repeat(_, e, min, max) => {
+                        if deriv[0] == ExprRef::NO_MATCH {
+                            return ExprRef::NO_MATCH;
+                        }
                         let max = if max == u32::MAX {
                             u32::MAX
                         } else {
