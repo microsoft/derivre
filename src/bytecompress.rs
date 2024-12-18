@@ -70,9 +70,9 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
-                Expr::Concat(_, _) => trg.mk_concat(args),
-                Expr::Or(_, _) => trg.mk_or(args),
-                Expr::And(_, _) => trg.mk_and(args),
+                Expr::Concat(_, _) => trg.mk_concat(&mut args),
+                Expr::Or(_, _) => trg.mk_or(&mut args),
+                Expr::And(_, _) => trg.mk_and(&mut args),
             };
             self.map_cache.insert(e, r);
         }

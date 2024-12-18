@@ -9,7 +9,7 @@ struct StackNode<'a, T, S> {
 pub fn map_ast<'a, T, S>(
     ast: &'a T,
     get_args: impl Fn(&T) -> &[T],
-    mut map_node: impl FnMut(&T, Vec<S>) -> Result<S>,
+    mut map_node: impl FnMut(&T, &mut Vec<S>) -> Result<S>,
 ) -> Result<S> {
     let mut stack = vec![StackNode {
         ast,
@@ -17,7 +17,7 @@ pub fn map_ast<'a, T, S>(
         args: Vec::new(),
     }];
 
-    while let Some(entry) = stack.pop() {
+    while let Some(mut entry) = stack.pop() {
         let args = get_args(entry.ast);
         if args.len() > 0 && entry.args.len() == 0 {
             // children not yet processed
@@ -34,7 +34,7 @@ pub fn map_ast<'a, T, S>(
             }
         } else {
             assert!(entry.args.len() == args.len());
-            let r = map_node(entry.ast, entry.args)?;
+            let r = map_node(entry.ast, &mut entry.args)?;
             if stack.len() == 0 {
                 return Ok(r);
             }

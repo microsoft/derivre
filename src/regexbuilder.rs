@@ -281,20 +281,20 @@ impl RegexBuilder {
             } else if include_nl {
                 let hex0 = exprset.mk_byte_set(&byteset_from_range(b'0', b'1'));
                 let hex1 = exprset.mk_byte_set(&hex_byteset(include_nl));
-                exprset.mk_concat(vec![upref, hex0, hex1])
+                exprset.mk_concat(&mut vec![upref, hex0, hex1])
             } else {
                 let n0 = exprset.mk_byte(b'0');
                 let n1 = exprset.mk_byte(b'1');
                 let hex0 = exprset.mk_byte_set(&hex_byteset(false));
-                let hex0 = exprset.mk_concat(vec![n0, hex0]);
+                let hex0 = exprset.mk_concat(&mut vec![n0, hex0]);
                 let hex1 = exprset.mk_byte_set(&hex_byteset(true));
-                let hex1 = exprset.mk_concat(vec![n1, hex1]);
-                let hex01 = exprset.mk_or(vec![hex0, hex1]);
-                exprset.mk_concat(vec![upref, hex01])
+                let hex1 = exprset.mk_concat(&mut vec![n1, hex1]);
+                let hex01 = exprset.mk_or(&mut vec![hex0, hex1]);
+                exprset.mk_concat(&mut vec![upref, hex01])
             };
 
-            let u_or_single = exprset.mk_or(vec![u0000, single_quote]);
-            exprset.mk_concat(vec![backslash, u_or_single])
+            let u_or_single = exprset.mk_or(&mut vec![u0000, single_quote]);
+            exprset.mk_concat(&mut vec![backslash, u_or_single])
         }
 
         fn quote_byteset(
@@ -329,11 +329,11 @@ impl RegexBuilder {
                 }
 
                 let quoted_bs = exprset.mk_byte_set(&quoted_bs);
-                let other_bytes = exprset.mk_or(other_bytes);
-                let other_bytes = exprset.mk_concat(vec![upref, other_bytes]);
+                let other_bytes = exprset.mk_or(&mut other_bytes);
+                let other_bytes = exprset.mk_concat(&mut vec![upref, other_bytes]);
 
-                let quoted_or_other = exprset.mk_or(vec![quoted_bs, other_bytes]);
-                exprset.mk_concat(vec![backslash, quoted_or_other])
+                let quoted_or_other = exprset.mk_or(&mut vec![quoted_bs, other_bytes]);
+                exprset.mk_concat(&mut vec![backslash, quoted_or_other])
             };
 
             let mut bs_without_ctrl = bs;
@@ -360,7 +360,7 @@ impl RegexBuilder {
             }
             let bs_without_ctrl = exprset.mk_byte_set(&bs_without_ctrl);
             alts.push(bs_without_ctrl);
-            exprset.mk_or(alts)
+            exprset.mk_or(&mut alts)
         }
 
         for c in options.allowed_escapes.as_bytes() {
@@ -410,7 +410,7 @@ impl RegexBuilder {
         let r = if options.raw_mode {
             r
         } else {
-            self.exprset.mk_concat(vec![quote, r, quote])
+            self.exprset.mk_concat(&mut vec![quote, r, quote])
         };
         Ok(r)
     }

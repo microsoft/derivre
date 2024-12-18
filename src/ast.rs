@@ -455,7 +455,7 @@ impl ExprSet {
     pub fn simple_map<V: Clone>(
         &mut self,
         r: ExprRef,
-        process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,
+        process: impl FnMut(&mut ExprSet, &mut Vec<V>, ExprRef) -> V,
     ) -> V {
         let mut cache = HashMap::new();
         let concat_nullable_check = false;
@@ -469,7 +469,7 @@ impl ExprSet {
         cache: &mut HashMap<K, V>,
         concat_nullable_check: bool,
         mk_key: impl Fn(ExprRef) -> K,
-        mut process: impl FnMut(&mut ExprSet, Vec<V>, ExprRef) -> V,
+        mut process: impl FnMut(&mut ExprSet, &mut Vec<V>, ExprRef) -> V,
     ) -> V {
         if let Some(d) = cache.get(&mk_key(r)) {
             return d.clone();
@@ -507,7 +507,7 @@ impl ExprSet {
 
             todo.pop(); // pop r
 
-            let v = process(self, mapped, r);
+            let v = process(self, &mut mapped, r);
             cache.insert(idx, v);
         }
         cache[&mk_key(r)].clone()

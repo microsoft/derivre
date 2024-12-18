@@ -79,7 +79,7 @@ impl DerivCache {
                             max.saturating_sub(1)
                         };
                         let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
-                        exprs.mk_concat(vec![deriv[0], tail])
+                        exprs.mk_concat(&mut vec![deriv[0], tail])
                     }
                     Expr::Concat(_, args) => {
                         let mut or_branches = vec![];
@@ -87,12 +87,12 @@ impl DerivCache {
                         for i in 0..args.len() {
                             let nullable = exprs.is_nullable(args[i]);
                             args[i] = deriv[i];
-                            or_branches.push(exprs.mk_concat(args[i..].to_vec()));
+                            or_branches.push(exprs.mk_concat(&mut args[i..].to_vec()));
                             if !nullable {
                                 break;
                             }
                         }
-                        exprs.mk_or(or_branches)
+                        exprs.mk_or(&mut or_branches)
                     }
                     Expr::Lookahead(_, e, offset) => {
                         if e == ExprRef::EMPTY_STRING {

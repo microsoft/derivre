@@ -64,7 +64,7 @@ impl TrieNode {
         if children.len() == 1 {
             children[0]
         } else {
-            set.mk_or(children)
+            set.mk_or(&mut children)
         }
     }
 
@@ -74,7 +74,7 @@ impl TrieNode {
             TrieSelector::Byte(b) => set.mk_byte(*b),
             TrieSelector::ByteSet(bs) => set.mk_byte_set(&bs),
         };
-        set.mk_concat(vec![head, tail])
+        set.mk_concat(&mut vec![head, tail])
     }
 }
 
@@ -158,8 +158,8 @@ impl ExprSet {
             let r = match node.ast.kind() {
                 HirKind::Empty => ExprRef::EMPTY_STRING,
                 HirKind::Literal(bytes) => {
-                    let byte_args = bytes.0.iter().map(|b| self.mk_byte(*b)).collect();
-                    self.mk_concat(byte_args)
+                    let mut byte_args = bytes.0.iter().map(|b| self.mk_byte(*b)).collect();
+                    self.mk_concat(&mut byte_args)
                 }
                 HirKind::Class(hir::Class::Bytes(ranges)) => {
                     let mut bs = byteset_256();
@@ -194,11 +194,11 @@ impl ExprSet {
                 }
                 HirKind::Concat(args) => {
                     assert!(args.len() == node.args.len());
-                    self.mk_concat(node.args)
+                    self.mk_concat(&mut node.args)
                 }
                 HirKind::Alternation(args) => {
                     assert!(args.len() == node.args.len());
-                    self.mk_or(node.args)
+                    self.mk_or(&mut node.args)
                 }
             };
 

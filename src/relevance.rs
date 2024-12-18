@@ -45,7 +45,7 @@ fn swap_each<A: Copy>(v: &mut Vec<(A, A)>) {
 
 fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
     mut s: Vec<(A, B)>,
-    mut f: impl FnMut(Vec<B>) -> B,
+    mut f: impl FnMut(&mut Vec<B>) -> B,
 ) -> Vec<(A, B)> {
     s.sort_unstable();
     let mut by_set = vec![];
@@ -59,7 +59,7 @@ fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
         if len == 1 {
             by_set.push(s[i]);
         } else {
-            by_set.push((s[i].0, f(s[i..j].iter().map(|(_, x)| *x).collect())))
+            by_set.push((s[i].0, f(&mut s[i..j].iter().map(|(_, x)| *x).collect())))
         }
         i = j;
     }
@@ -89,7 +89,7 @@ fn make_disjoint(exprs: &mut ExprSet, inp: &SymRes) -> SymRes {
 
             // we've got lucky - direct match
             if a == b {
-                res[idx] = (a, exprs.mk_or(vec![av, bv]));
+                res[idx] = (a, exprs.mk_or(&mut vec![av, bv]));
                 continue 'input;
             }
 
@@ -100,7 +100,7 @@ fn make_disjoint(exprs: &mut ExprSet, inp: &SymRes) -> SymRes {
             }
 
             // replace previous b with a&b -> av|ab
-            res[idx] = (a_and_b, exprs.mk_or(vec![av, bv]));
+            res[idx] = (a_and_b, exprs.mk_or(&mut vec![av, bv]));
             let b_sub_a = exprs.mk_byte_set_sub(b, a);
             if b_sub_a != ExprRef::NO_MATCH {
                 // also add b-a -> bv (if non-empty)
@@ -143,7 +143,7 @@ impl RelevanceCache {
             &mut self.sym_deriv,
             true,
             |e| e,
-            |exprs, mut deriv, e| {
+            |exprs, deriv, e| {
                 let r = match exprs.get(e) {
                     Expr::EmptyString => vec![],
                     Expr::NoMatch => vec![],
@@ -166,7 +166,7 @@ impl RelevanceCache {
                                             exprs.expr_to_string(*r0),
                                             exprs.expr_to_string(*r1)
                                         );
-                                        let r = exprs.mk_and(vec![*r0, *r1]);
+                                        let r = exprs.mk_and(&mut vec![*r0, *r1]);
                                         if r != ExprRef::NO_MATCH {
                                             new_acc.push((b, r));
                                         }
@@ -178,7 +178,7 @@ impl RelevanceCache {
                         simplify(exprs, acc)
                     }
 
-                    Expr::Or(_, _) => simplify(exprs, deriv.into_iter().flatten().collect()),
+                    Expr::Or(_, _) => simplify(exprs, deriv.drain(0..).flatten().collect()),
 
                     Expr::Not(_, _) => {
                         let inner_deriv = make_disjoint(exprs, &deriv[0]);
@@ -211,7 +211,7 @@ impl RelevanceCache {
                         let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
                         let tmp = deriv[0]
                             .iter()
-                            .map(|(b, r)| (*b, exprs.mk_concat(vec![*r, tail])))
+                            .map(|(b, r)| (*b, exprs.mk_concat(&mut vec![*r, tail])))
                             .collect();
                         simplify(exprs, tmp)
                     }
@@ -223,7 +223,7 @@ impl RelevanceCache {
                             or_branches.extend(deriv[i].iter().map(|(b, r)| {
                                 let mut cc = vec![*r];
                                 cc.extend_from_slice(&args[i + 1..]);
-                                (*b, exprs.mk_concat(cc))
+                                (*b, exprs.mk_concat(&mut cc))
                             }));
                             if !nullable {
                                 break;

@@ -65,34 +65,34 @@ impl ExprSet {
         }
     }
 
-    fn flatten_tag(&self, exp_tag: ExprTag, args: Vec<ExprRef>) -> Vec<ExprRef> {
+    fn flatten_tag(&self, exp_tag: ExprTag, args: &mut Vec<ExprRef>) {
         let mut i = 0;
         while i < args.len() {
             let tag = self.get_tag(args[i]);
             if tag == exp_tag {
-                // ok, we found tag, we can no longer return the original vector
-                let mut res = args[0..i].to_vec();
-                while i < args.len() {
-                    let tag = self.get_tag(args[i]);
+                // ok, we found tag, we can no longer work only with the original vector
+                let the_rest = args[i..].to_vec();
+                args.truncate(i);
+                for a in the_rest {
+                    let tag = self.get_tag(a);
                     if tag != exp_tag {
-                        res.push(args[i]);
+                        args.push(a);
                     } else {
-                        res.extend_from_slice(self.get_args(args[i]));
+                        args.extend_from_slice(self.get_args(a));
                     }
                     i += 1;
                 }
-                return res;
+                return;
             }
             i += 1;
         }
-        args
     }
 
     // Complexity of mk_X(args) is O(n log n) where n = |flatten(X, args)|
 
-    pub fn mk_or(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
+    pub fn mk_or(&mut self, args: &mut Vec<ExprRef>) -> ExprRef {
         // TODO deal with byte ranges
-        args = self.flatten_tag(ExprTag::Or, args);
+        self.flatten_tag(ExprTag::Or, args);
         self.pay(2 * args.len());
         args.sort_unstable();
         let mut dp = 0;
@@ -150,7 +150,7 @@ impl ExprSet {
                 }
             });
             let node = self.mk_byte_set(&byteset);
-            add_to_sorted(&mut args, node);
+            add_to_sorted(args, node);
         }
 
         if num_lookahead > 1 {
@@ -195,10 +195,14 @@ impl ExprSet {
         }
     }
 
-    fn or_optimized(&mut self, flags: ExprFlags, args: Vec<ExprRef>) -> ExprRef {
+    fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
         let mut concats: Vec<Vec<ExprRef>> = args
             .iter()
-            .map(|e| self.flatten_tag(ExprTag::Concat, vec![*e]))
+            .map(|e| {
+                let mut tmp = vec![*e];
+                self.flatten_tag(ExprTag::Concat, &mut tmp);
+                tmp
+            })
             .collect();
         concats.sort_unstable();
         let mut prev = ExprRef::INVALID;
@@ -226,11 +230,11 @@ impl ExprSet {
     fn trie_rec(&mut self, args: &[Vec<ExprRef>], offset: usize, depth: usize) -> ExprRef {
         // limit recursion depth
         if depth > 100 {
-            let v = args
+            let mut v = args
                 .iter()
-                .map(|v| self.mk_concat((&v[offset..]).to_vec()))
+                .map(|v| self.mk_concat(&mut (&v[offset..]).to_vec()))
                 .collect();
-            return self.mk_or(v);
+            return self.mk_or(&mut v);
         }
 
         let mut end_offset = offset;
@@ -268,8 +272,8 @@ impl ExprSet {
         }
 
         let mut children = first[offset..end_offset].to_vec();
-        children.push(self.mk_or(alternatives));
-        self.mk_concat(children)
+        children.push(self.mk_or(&mut alternatives));
+        self.mk_concat(&mut children)
     }
 
     pub fn mk_byte_set_not(&mut self, x: ExprRef) -> ExprRef {
@@ -389,8 +393,8 @@ impl ExprSet {
         self.mk(Expr::And(flags, &[a, b]))
     }
 
-    pub fn mk_and(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
-        args = self.flatten_tag(ExprTag::And, args);
+    pub fn mk_and(&mut self, args: &mut Vec<ExprRef>) -> ExprRef {
+        self.flatten_tag(ExprTag::And, args);
         self.pay(2 * args.len());
         args.sort_unstable();
         let mut dp = 0;
@@ -434,8 +438,8 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_concat(&mut self, mut args: Vec<ExprRef>) -> ExprRef {
-        args = self.flatten_tag(ExprTag::Concat, args);
+    pub fn mk_concat(&mut self, args: &mut Vec<ExprRef>) -> ExprRef {
+        self.flatten_tag(ExprTag::Concat, args);
         self.pay(args.len());
         args.retain(|&e| e != ExprRef::EMPTY_STRING);
         if args.len() == 0 {
@@ -468,7 +472,7 @@ impl ExprSet {
         for b in s {
             args.push(self.mk_byte(*b));
         }
-        self.mk_concat(args)
+        self.mk_concat(&mut args)
     }
 
     pub fn mk_literal(&mut self, s: &str) -> ExprRef {
