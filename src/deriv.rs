@@ -49,6 +49,9 @@ impl DerivCache {
             }
         }
 
+        let mut tmp = vec![];
+        let mut or_branches = vec![];
+
         // regular path
         exprs.map(
             r,
@@ -79,15 +82,19 @@ impl DerivCache {
                             max.saturating_sub(1)
                         };
                         let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
-                        exprs.mk_concat(&mut vec![deriv[0], tail])
+                        tmp.clear();
+                        tmp.push(deriv[0]);
+                        tmp.push(tail);
+                        exprs.mk_concat(&mut tmp)
                     }
                     Expr::Concat(_, args) => {
-                        let mut or_branches = vec![];
-                        let mut args = args.to_vec();
-                        for i in 0..args.len() {
-                            let nullable = exprs.is_nullable(args[i]);
-                            args[i] = deriv[i];
-                            or_branches.push(exprs.mk_concat(&mut args[i..].to_vec()));
+                        or_branches.clear();
+                        tmp.clear();
+                        tmp.extend_from_slice(args);
+                        for i in 0..tmp.len() {
+                            let nullable = exprs.is_nullable(tmp[i]);
+                            tmp[i] = deriv[i];
+                            or_branches.push(exprs.mk_concat(&mut tmp[i..].to_vec()));
                             if !nullable {
                                 break;
                             }

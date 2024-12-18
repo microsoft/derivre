@@ -476,6 +476,8 @@ impl ExprSet {
         }
 
         let mut todo = vec![r];
+        let mut mapped = Vec::with_capacity(128);
+
         while let Some(r) = todo.last() {
             let r = *r;
             let idx = mk_key(r);
@@ -487,7 +489,7 @@ impl ExprSet {
             let is_concat = concat_nullable_check && matches!(e, Expr::Concat(_, _));
             let todo_len = todo.len();
             let eargs = e.args();
-            let mut mapped = Vec::with_capacity(eargs.len());
+            mapped.clear();
             for a in eargs {
                 let a = *a;
                 let brk = is_concat && !self.is_nullable(a);
