@@ -213,6 +213,7 @@ impl PrettyPrinter {
                     write!(f, "{{{}, {}}}", min, max)
                 }
             }
+            Expr::ReminderIs(a, b) => write!(f, "( % {} == {} )", a, b),
             Expr::Concat(_, es) => self.write_concat(exprset, es, f, max_len),
             Expr::Or(_, es) => self.write_exprs(exprset, " | ", es, f, max_len),
             Expr::And(_, es) => self.write_exprs(exprset, " & ", es, f, max_len),

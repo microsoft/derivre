@@ -384,6 +384,12 @@ impl ExprSet {
         }
     }
 
+    pub fn mk_reminder_is(&mut self, d: u32, r: u32) -> ExprRef {
+        assert!(d > 0);
+        assert!(r <= d);
+        self.mk(Expr::ReminderIs(d, r))
+    }
+
     // this avoids allocation when hitting the hash-cons
     pub(crate) fn mk_and2(&mut self, a: ExprRef, b: ExprRef) -> ExprRef {
         self.pay(2);

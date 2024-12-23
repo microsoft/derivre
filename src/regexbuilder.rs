@@ -78,6 +78,9 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
+    /// ReminderIs(d,r) matches if the input, interpreted as decimal ASCII number, modulo d is r.
+    /// ReminderIs(d,d) is equivalent to ReminderIs(d,0) minus the EmptyString.
+    ReminderIs(u32, u32),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,
     /// Matches nothing. Same as Or([]).
@@ -111,6 +114,7 @@ impl RegexAst {
                 std::slice::from_ref(ast)
             }
             RegexAst::EmptyString
+            | RegexAst::ReminderIs(_, _)
             | RegexAst::NoMatch
             | RegexAst::Regex(_)
             | RegexAst::Literal(_)
@@ -137,6 +141,7 @@ impl RegexAst {
             RegexAst::Repeat(_, _, _) => "Repeat",
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
+            RegexAst::ReminderIs(_, _) => "ReminderIs",
         }
     }
 
@@ -189,6 +194,9 @@ impl RegexAst {
                 }
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
+                }
+                RegexAst::ReminderIs(d, r) => {
+                    dst.push_str(&format!(" % {} == {} ", d, r));
                 }
                 RegexAst::EmptyString | RegexAst::NoMatch => {}
             }
@@ -397,6 +405,7 @@ impl RegexBuilder {
                         exprset.mk_byte(b)
                     }
                 }
+                Expr::ReminderIs(a, b) => exprset.mk_reminder_is(a, b),
                 Expr::And(_, _) => exprset.mk_and(args),
                 Expr::Or(_, _) => exprset.mk_or(args),
                 Expr::Concat(_, _) => exprset.mk_concat(args),
@@ -467,6 +476,11 @@ impl RegexBuilder {
                     RegexAst::ByteLiteral(s) => self.exprset.mk_byte_literal(s),
                     RegexAst::Repeat(_, min, max) => {
                         self.exprset.mk_repeat(new_args[0], *min, *max)
+                    }
+                    RegexAst::ReminderIs(d, r) => {
+                        ensure!(*d > 0, "invalid reminder divisor");
+                        ensure!(*r <= *d, "invalid reminder remainder");
+                        self.exprset.mk_reminder_is(*d, *r)
                     }
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {

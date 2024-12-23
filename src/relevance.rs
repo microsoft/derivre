@@ -153,6 +153,15 @@ impl RelevanceCache {
                     // just unwrap lookaheads
                     Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
 
+                    Expr::ReminderIs(d, r) => (0..10)
+                        .map(|i| {
+                            (
+                                exprs.mk_byte(exprs.digits[i]),
+                                exprs.mk_reminder_is(d, (r * 10 + i as u32) % d),
+                            )
+                        })
+                        .collect(),
+
                     Expr::And(_, _) => {
                         let mut acc = deriv.pop().unwrap();
                         while let Some(other) = deriv.pop() {

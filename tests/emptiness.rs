@@ -204,3 +204,53 @@ fn test_prefixes_except() {
 
     check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foo|bar)M"#);
 }
+
+#[test]
+fn test_reminder_is() {
+    for d in 1..=300 {
+        let mut r = RegexBuilder::new();
+        let id = r.mk(&RegexAst::ReminderIs(d, d)).unwrap();
+        let mut rx = r.to_regex(id);
+        assert!(!rx.is_match(""));
+        assert!(!rx.is_match("-1"));
+        for t in 0..(7 * d) {
+            let s = format!("{}", t);
+            if rx.is_match(&s) != (t % d == 0) {
+                panic!("{} % {} == {}", t, d, t % d);
+            }
+        }
+    }
+}
+
+fn reminder_is_check(should_be_empty: bool, d: u32, r: u32, other_rx: &str) {
+    let mut bld = RegexBuilder::new();
+    let id = bld
+        .mk(&RegexAst::And(vec![
+            RegexAst::ReminderIs(d, r),
+            RegexAst::Regex(other_rx.to_string()),
+        ]))
+        .unwrap();
+    let mut rx = bld.to_regex(id);
+    if rx.always_empty() != should_be_empty {
+        panic!(
+            "empty({} % {} & {:?}) != {}",
+            d, r, other_rx, should_be_empty
+        );
+    }
+}
+
+fn reminder_is_empty(d: u32, other_rx: &str) {
+    reminder_is_check(true, d, d, other_rx);
+}
+
+fn reminder_is_non_empty(d: u32, other_rx: &str) {
+    reminder_is_check(false, d, d, other_rx);
+}
+
+#[test]
+fn test_reminder_is_relevance() {
+    reminder_is_non_empty(2, "[0-9]+");
+    reminder_is_non_empty(3, "[2]+");
+    reminder_is_empty(3, "[a-z]*");
+    reminder_is_empty(2, "[3579]+");
+}
