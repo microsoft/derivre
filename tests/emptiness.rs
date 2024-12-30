@@ -226,16 +226,13 @@ fn remainder_is_check(should_be_empty: bool, d: u32, other_rx: &str) {
     let mut bld = RegexBuilder::new();
     let id = bld
         .mk(&RegexAst::And(vec![
-            RegexAst::MultipleOf(d),
             RegexAst::Regex(other_rx.to_string()),
+            RegexAst::MultipleOf(d),
         ]))
         .unwrap();
     let mut rx = bld.to_regex(id);
     if rx.always_empty() != should_be_empty {
-        panic!(
-            "empty({} % & {:?}) != {}",
-            d, other_rx, should_be_empty
-        );
+        panic!("empty({} % & {:?}) != {}", d, other_rx, should_be_empty);
     }
 }
 

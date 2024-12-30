@@ -81,6 +81,13 @@ impl ByteCompressor {
         self.map_cache[&e]
     }
 
+    fn add_single_byte(&mut self, b: u8) {
+        if self.mapping[b as usize] == INVALID_MAPPING {
+            self.mapping[b as usize] = self.alphabet_size as u8;
+            self.alphabet_size += 1;
+        }
+    }
+
     pub fn compress(&mut self, exprset: &ExprSet, rx_list: &[ExprRef]) -> (ExprSet, Vec<ExprRef>) {
         self.mapping = vec![INVALID_MAPPING; exprset.alphabet_size()];
 
@@ -93,23 +100,11 @@ impl ByteCompressor {
             visited[e.as_usize()] = true;
             todo.extend_from_slice(exprset.get_args(e));
             match exprset.get(e) {
-                Expr::Byte(b) => {
-                    assert!(
-                        self.mapping[b as usize] == INVALID_MAPPING,
-                        "visiting the same byte the second time"
-                    );
-                    self.mapping[b as usize] = self.alphabet_size as u8;
-                    self.alphabet_size += 1;
-                }
-                Expr::ByteSet(bs) => {
-                    self.bytesets.push(bs.to_vec());
-                }
+                Expr::Byte(b) => self.add_single_byte(b),
+                Expr::ByteSet(bs) => self.bytesets.push(bs.to_vec()),
                 Expr::RemainderIs(_, _) => {
                     for b in exprset.digits {
-                        if self.mapping[b as usize] == INVALID_MAPPING {
-                            self.mapping[b as usize] = self.alphabet_size as u8;
-                            self.alphabet_size += 1;
-                        }
+                        self.add_single_byte(b);
                     }
                 }
                 _ => {}
