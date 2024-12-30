@@ -78,9 +78,9 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
-    /// RemainderIs(d,r) matches if the input, interpreted as decimal ASCII number, modulo d is r.
-    /// RemainderIs(d,d) is equivalent to RemainderIs(d,0) minus the EmptyString.
-    RemainderIs(u32, u32),
+    /// MultipleOf(d) matches if the input, interpreted as decimal ASCII number, is a multiple of d.
+    /// EmptyString is not included.
+    MultipleOf(u32),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,
     /// Matches nothing. Same as Or([]).
@@ -114,7 +114,7 @@ impl RegexAst {
                 std::slice::from_ref(ast)
             }
             RegexAst::EmptyString
-            | RegexAst::RemainderIs(_, _)
+            | RegexAst::MultipleOf(_)
             | RegexAst::NoMatch
             | RegexAst::Regex(_)
             | RegexAst::Literal(_)
@@ -141,7 +141,7 @@ impl RegexAst {
             RegexAst::Repeat(_, _, _) => "Repeat",
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
-            RegexAst::RemainderIs(_, _) => "RemainderIs",
+            RegexAst::MultipleOf(_) => "MultipleOf",
         }
     }
 
@@ -195,8 +195,8 @@ impl RegexAst {
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
                 }
-                RegexAst::RemainderIs(d, r) => {
-                    dst.push_str(&format!(" % {} == {} ", d, r));
+                RegexAst::MultipleOf(d) => {
+                    dst.push_str(&format!(" % {} == 0 ", d));
                 }
                 RegexAst::EmptyString | RegexAst::NoMatch => {}
             }
@@ -477,10 +477,9 @@ impl RegexBuilder {
                     RegexAst::Repeat(_, min, max) => {
                         self.exprset.mk_repeat(new_args[0], *min, *max)
                     }
-                    RegexAst::RemainderIs(d, r) => {
-                        ensure!(*d > 0, "invalid remainder divisor");
-                        ensure!(*r <= *d, "invalid remainder remainder");
-                        self.exprset.mk_remainder_is(*d, *r)
+                    RegexAst::MultipleOf(d) => {
+                        ensure!(*d > 0, "invalid multiple of");
+                        self.exprset.mk_remainder_is(*d, *d)
                     }
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {
