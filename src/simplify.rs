@@ -384,10 +384,10 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_reminder_is(&mut self, d: u32, r: u32) -> ExprRef {
+    pub fn mk_remainder_is(&mut self, d: u32, r: u32) -> ExprRef {
         assert!(d > 0);
         assert!(r <= d);
-        self.mk(Expr::ReminderIs(d, r))
+        self.mk(Expr::RemainderIs(d, r))
     }
 
     // this avoids allocation when hitting the hash-cons

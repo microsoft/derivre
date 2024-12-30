@@ -70,7 +70,7 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
-                Expr::ReminderIs(a, b) => trg.mk_reminder_is(a, b),
+                Expr::RemainderIs(a, b) => trg.mk_remainder_is(a, b),
                 Expr::Concat(_, _) => trg.mk_concat(&mut args),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
@@ -104,7 +104,7 @@ impl ByteCompressor {
                 Expr::ByteSet(bs) => {
                     self.bytesets.push(bs.to_vec());
                 }
-                Expr::ReminderIs(_, _) => {
+                Expr::RemainderIs(_, _) => {
                     for b in exprset.digits {
                         if self.mapping[b as usize] == INVALID_MAPPING {
                             self.mapping[b as usize] = self.alphabet_size as u8;

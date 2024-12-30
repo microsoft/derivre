@@ -69,9 +69,9 @@ impl DerivCache {
                             ExprRef::NO_MATCH
                         }
                     }
-                    Expr::ReminderIs(d, r) => {
+                    Expr::RemainderIs(d, r) => {
                         if let Some(idx) = exprs.digits.iter().position(|&x| x == b) {
-                            exprs.mk_reminder_is(d, (r * 10 + idx as u32) % d)
+                            exprs.mk_remainder_is(d, (r * 10 + idx as u32) % d)
                         } else {
                             ExprRef::NO_MATCH
                         }

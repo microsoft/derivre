@@ -16,7 +16,7 @@ pub(crate) fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
             Expr::Byte(b) => return NextByte::ForcedByte(b),
             Expr::And(_, _) => return NextByte::SomeBytes,
             Expr::Not(_, _) => return NextByte::SomeBytes,
-            Expr::ReminderIs(_, _) => return NextByte::SomeBytes,
+            Expr::RemainderIs(_, _) => return NextByte::SomeBytes,
             Expr::Lookahead(_, e, _) => {
                 r = e;
             }
