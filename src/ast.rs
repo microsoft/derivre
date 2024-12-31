@@ -41,6 +41,9 @@ pub enum Expr<'a> {
     NoMatch,
     Byte(u8),
     ByteSet(&'a [u32]),
+    // RemainderIs(d, r) matches numbers N where N % d == r
+    // RemainderIs(d, d) is equivalent to RemainderIs(d, 0) \ EmptyString
+    RemainderIs(u32, u32),
     Lookahead(ExprFlags, ExprRef, u32),
     Not(ExprFlags, ExprRef),
     Repeat(ExprFlags, ExprRef, u32, u32),
@@ -92,6 +95,7 @@ pub enum ExprTag {
     NoMatch,
     Byte,
     ByteSet,
+    RemainderIs,
     Lookahead,
     Not,
     Repeat,
@@ -183,7 +187,11 @@ impl<'a> Expr<'a> {
             Expr::Lookahead(_, e, _) | Expr::Not(_, e) | Expr::Repeat(_, e, _, _) => {
                 std::slice::from_ref(e)
             }
-            Expr::EmptyString | Expr::NoMatch | Expr::Byte(_) | Expr::ByteSet(_) => &[],
+            Expr::RemainderIs(_, _)
+            | Expr::EmptyString
+            | Expr::NoMatch
+            | Expr::Byte(_)
+            | Expr::ByteSet(_) => &[],
         }
     }
 
@@ -191,6 +199,13 @@ impl<'a> Expr<'a> {
     fn get_flags(&self) -> ExprFlags {
         match self {
             Expr::EmptyString => ExprFlags::POSITIVE_NULLABLE,
+            Expr::RemainderIs(_, k) => {
+                if *k == 0 {
+                    ExprFlags::POSITIVE_NULLABLE
+                } else {
+                    ExprFlags::POSITIVE
+                }
+            }
             Expr::NoMatch => ExprFlags::ZERO,
             Expr::Byte(_) | Expr::ByteSet(_) => ExprFlags::POSITIVE,
             Expr::Lookahead(f, _, _) => *f,
@@ -216,6 +231,7 @@ impl<'a> Expr<'a> {
             ExprTag::ByteSet => Expr::ByteSet(&s[1..]),
             ExprTag::Lookahead => Expr::Lookahead(flags, ExprRef::new(s[1]), s[2]),
             ExprTag::Not => Expr::Not(flags, ExprRef::new(s[1])),
+            ExprTag::RemainderIs => Expr::RemainderIs(s[1], s[2]),
             ExprTag::Repeat => Expr::Repeat(flags, ExprRef::new(s[1]), s[2], s[3]),
             ExprTag::Concat => Expr::Concat(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::Or => Expr::Or(flags, bytemuck::cast_slice(&s[1..])),
@@ -233,6 +249,9 @@ impl<'a> Expr<'a> {
         match self {
             Expr::EmptyString => trg.push_u32(flags.encode(ExprTag::EmptyString)),
             Expr::NoMatch => trg.push_u32(flags.encode(ExprTag::NoMatch)),
+            Expr::RemainderIs(d, r) => {
+                trg.push_slice(&[flags.encode(ExprTag::RemainderIs), *d, *r]);
+            }
             Expr::Byte(b) => {
                 trg.push_slice(&[flags.encode(ExprTag::Byte), *b as u32]);
             }
@@ -259,6 +278,7 @@ pub struct ExprSet {
     exprs: VecHashCons,
     pub(crate) alphabet_size: usize,
     pub(crate) alphabet_words: usize,
+    pub(crate) digits: [u8; 10],
     pub(crate) cost: u64,
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
@@ -273,6 +293,10 @@ impl ExprSet {
             exprs,
             alphabet_size,
             alphabet_words,
+            digits: [
+                '0' as u8, '1' as u8, '2' as u8, '3' as u8, '4' as u8, '5' as u8, '6' as u8,
+                '7' as u8, '8' as u8, '9' as u8,
+            ],
             cost: 0,
             pp: PrettyPrinter::new_simple(alphabet_size),
             optimize: true,
@@ -439,7 +463,11 @@ impl ExprSet {
         match tag {
             ExprTag::Concat | ExprTag::Or | ExprTag::And => bytemuck::cast_slice(&s[1..]),
             ExprTag::Not | ExprTag::Repeat | ExprTag::Lookahead => bytemuck::cast_slice(&s[1..2]),
-            ExprTag::EmptyString | ExprTag::NoMatch | ExprTag::Byte | ExprTag::ByteSet => &[],
+            ExprTag::RemainderIs
+            | ExprTag::EmptyString
+            | ExprTag::NoMatch
+            | ExprTag::Byte
+            | ExprTag::ByteSet => &[],
         }
     }
 

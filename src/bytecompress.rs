@@ -70,6 +70,7 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
+                Expr::RemainderIs(a, b) => trg.mk_remainder_is(a, b),
                 Expr::Concat(_, _) => trg.mk_concat(&mut args),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
@@ -78,6 +79,13 @@ impl ByteCompressor {
         }
 
         self.map_cache[&e]
+    }
+
+    fn add_single_byte(&mut self, b: u8) {
+        if self.mapping[b as usize] == INVALID_MAPPING {
+            self.mapping[b as usize] = self.alphabet_size as u8;
+            self.alphabet_size += 1;
+        }
     }
 
     pub fn compress(&mut self, exprset: &ExprSet, rx_list: &[ExprRef]) -> (ExprSet, Vec<ExprRef>) {
@@ -92,16 +100,12 @@ impl ByteCompressor {
             visited[e.as_usize()] = true;
             todo.extend_from_slice(exprset.get_args(e));
             match exprset.get(e) {
-                Expr::Byte(b) => {
-                    assert!(
-                        self.mapping[b as usize] == INVALID_MAPPING,
-                        "visiting the same byte the second time"
-                    );
-                    self.mapping[b as usize] = self.alphabet_size as u8;
-                    self.alphabet_size += 1;
-                }
-                Expr::ByteSet(bs) => {
-                    self.bytesets.push(bs.to_vec());
+                Expr::Byte(b) => self.add_single_byte(b),
+                Expr::ByteSet(bs) => self.bytesets.push(bs.to_vec()),
+                Expr::RemainderIs(_, _) => {
+                    for b in exprset.digits {
+                        self.add_single_byte(b);
+                    }
                 }
                 _ => {}
             }
@@ -118,6 +122,9 @@ impl ByteCompressor {
         }
 
         let mut trg = ExprSet::new(self.alphabet_size);
+        for digit in 0..=9 {
+            trg.digits[digit] = self.mapping['0' as usize + digit as usize];
+        }
         let res_exprs: Vec<ExprRef> = rx_list
             .iter()
             .map(|&e| self.map_expr(&mut trg, exprset, e))
