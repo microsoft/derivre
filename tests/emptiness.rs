@@ -209,25 +209,43 @@ fn test_prefixes_except() {
 fn test_multiple_of() {
     for d in 1..=300 {
         let mut r = RegexBuilder::new();
-        let id = r.mk(&RegexAst::MultipleOf(d)).unwrap();
+        let id = r.mk(&RegexAst::MultipleOf(d, 0)).unwrap();
         let mut rx = r.to_regex(id);
         assert!(!rx.is_match(""));
         assert!(!rx.is_match("-1"));
         for t in 0..(7 * d) {
             let s = format!("{}", t);
-            if rx.is_match(&s) != (t % d == 0) {
-                panic!("{} % {} == {}", t, d, t % d);
+            assert_eq!(rx.is_match(&s), t % d == 0, "{} % {} == {}", t, d, t % d);
+        }
+    }
+}
+
+#[test]
+fn test_multiple_of_fractional() {
+    for d in 1..=300 {
+        for scale in 1..=5 {
+            let mut r = RegexBuilder::new();
+            let id = r.mk(&RegexAst::MultipleOf(d, scale)).unwrap();
+            let mut rx = r.to_regex(id);
+            assert!(!rx.is_match(""));
+            assert!(!rx.is_match("-1"));
+            let scale_factor = 10u32.pow(scale);
+            for t in 0..(7 * d) {
+                let integer_part = t / scale_factor;
+                let fractional_part = t % scale_factor;
+                let s = format!("{}.{:0>width$}", integer_part, fractional_part, width = scale as usize);
+                assert_eq!(rx.is_match(&s), t % d == 0, "{} % {} == {}", t, d, t % d);
             }
         }
     }
 }
 
-fn remainder_is_check(should_be_empty: bool, d: u32, other_rx: &str) {
+fn remainder_is_check(should_be_empty: bool, d: u32, s:u32, other_rx: &str) {
     let mut bld = RegexBuilder::new();
     let id = bld
         .mk(&RegexAst::And(vec![
             RegexAst::Regex(other_rx.to_string()),
-            RegexAst::MultipleOf(d),
+            RegexAst::MultipleOf(d, s),
         ]))
         .unwrap();
     let mut rx = bld.to_regex(id);
@@ -236,18 +254,18 @@ fn remainder_is_check(should_be_empty: bool, d: u32, other_rx: &str) {
     }
 }
 
-fn remainder_is_empty(d: u32, other_rx: &str) {
-    remainder_is_check(true, d, other_rx);
+fn remainder_is_empty(d: u32, s: u32, other_rx: &str) {
+    remainder_is_check(true, d, s, other_rx);
 }
 
-fn remainder_is_non_empty(d: u32, other_rx: &str) {
-    remainder_is_check(false, d, other_rx);
+fn remainder_is_non_empty(d: u32, s: u32, other_rx: &str) {
+    remainder_is_check(false, d, s, other_rx);
 }
 
 #[test]
 fn test_remainder_is_relevance() {
-    remainder_is_non_empty(2, "[0-9]+");
-    remainder_is_non_empty(3, "[2]+");
-    remainder_is_empty(3, "[a-z]*");
-    remainder_is_empty(2, "[3579]+");
+    remainder_is_non_empty(2, 0, "[0-9]+");
+    remainder_is_non_empty(3, 0, "[2]+");
+    remainder_is_empty(3, 0, "[a-z]*");
+    remainder_is_empty(2, 0, "[3579]+");
 }

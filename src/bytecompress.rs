@@ -70,7 +70,9 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
-                Expr::RemainderIs(a, b) => trg.mk_remainder_is(a, b),
+                Expr::RemainderIs { divisor, remainder, scale, fractional_part } => {
+                    trg.mk_remainder_is(divisor, remainder, scale, fractional_part)
+                },
                 Expr::Concat(_, _) => trg.mk_concat(&mut args),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
@@ -102,9 +104,12 @@ impl ByteCompressor {
             match exprset.get(e) {
                 Expr::Byte(b) => self.add_single_byte(b),
                 Expr::ByteSet(bs) => self.bytesets.push(bs.to_vec()),
-                Expr::RemainderIs(_, _) => {
+                Expr::RemainderIs { fractional_part, .. } => {
                     for b in exprset.digits {
                         self.add_single_byte(b);
+                    }
+                    if !fractional_part {
+                        self.add_single_byte(b'.');
                     }
                 }
                 _ => {}

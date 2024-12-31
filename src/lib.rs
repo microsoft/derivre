@@ -11,6 +11,7 @@ mod regexbuilder;
 mod relevance;
 mod simplify;
 mod syntax;
+mod remainder;
 
 pub use ast::{ExprRef, NextByte};
 pub use regex::{AlphabetInfo, Regex, StateID};

@@ -41,9 +41,16 @@ pub enum Expr<'a> {
     NoMatch,
     Byte(u8),
     ByteSet(&'a [u32]),
-    // RemainderIs(d, r) matches numbers N where N % d == r
-    // RemainderIs(d, d) is equivalent to RemainderIs(d, 0) \ EmptyString
-    RemainderIs(u32, u32),
+    // RemainderIs (with fractional_part=false) matches numbers N where (N + remainder*10^len(N)) % divisor*10^-scale == 0.
+    // For remainder = 0, this is equivalent to N being divisible by d*10^-scale.
+    // The remainder = divisor case is the same, but we exclude the empty string.
+    // fractional_part = true is only for bookkeeping and signifies that we have produced a decimal point.
+    RemainderIs {
+        divisor: u32,
+        remainder: u32,
+        scale: u32,
+        fractional_part: bool,
+    },
     Lookahead(ExprFlags, ExprRef, u32),
     Not(ExprFlags, ExprRef),
     Repeat(ExprFlags, ExprRef, u32, u32),
@@ -187,7 +194,7 @@ impl<'a> Expr<'a> {
             Expr::Lookahead(_, e, _) | Expr::Not(_, e) | Expr::Repeat(_, e, _, _) => {
                 std::slice::from_ref(e)
             }
-            Expr::RemainderIs(_, _)
+            Expr::RemainderIs { .. }
             | Expr::EmptyString
             | Expr::NoMatch
             | Expr::Byte(_)
@@ -199,8 +206,8 @@ impl<'a> Expr<'a> {
     fn get_flags(&self) -> ExprFlags {
         match self {
             Expr::EmptyString => ExprFlags::POSITIVE_NULLABLE,
-            Expr::RemainderIs(_, k) => {
-                if *k == 0 {
+            Expr::RemainderIs { remainder, .. } => {
+                if *remainder == 0 {
                     ExprFlags::POSITIVE_NULLABLE
                 } else {
                     ExprFlags::POSITIVE
@@ -231,7 +238,12 @@ impl<'a> Expr<'a> {
             ExprTag::ByteSet => Expr::ByteSet(&s[1..]),
             ExprTag::Lookahead => Expr::Lookahead(flags, ExprRef::new(s[1]), s[2]),
             ExprTag::Not => Expr::Not(flags, ExprRef::new(s[1])),
-            ExprTag::RemainderIs => Expr::RemainderIs(s[1], s[2]),
+            ExprTag::RemainderIs => Expr::RemainderIs {
+                divisor: s[1],
+                remainder: s[2],
+                scale: s[3],
+                fractional_part: s[4] != 0,
+            },
             ExprTag::Repeat => Expr::Repeat(flags, ExprRef::new(s[1]), s[2], s[3]),
             ExprTag::Concat => Expr::Concat(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::Or => Expr::Or(flags, bytemuck::cast_slice(&s[1..])),
@@ -249,8 +261,8 @@ impl<'a> Expr<'a> {
         match self {
             Expr::EmptyString => trg.push_u32(flags.encode(ExprTag::EmptyString)),
             Expr::NoMatch => trg.push_u32(flags.encode(ExprTag::NoMatch)),
-            Expr::RemainderIs(d, r) => {
-                trg.push_slice(&[flags.encode(ExprTag::RemainderIs), *d, *r]);
+            Expr::RemainderIs { divisor, remainder, scale, fractional_part} => {
+                trg.push_slice(&[flags.encode(ExprTag::RemainderIs), *divisor, *remainder, *scale, *fractional_part as u32]);
             }
             Expr::Byte(b) => {
                 trg.push_slice(&[flags.encode(ExprTag::Byte), *b as u32]);

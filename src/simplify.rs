@@ -2,6 +2,7 @@ use crate::ast::{
     byteset_clear, byteset_contains, byteset_intersection, byteset_set, byteset_union, Expr,
     ExprFlags, ExprRef, ExprSet, ExprTag,
 };
+use crate::remainder::check_remainder;
 
 impl ExprSet {
     pub(crate) fn pay(&mut self, cost: usize) {
@@ -384,10 +385,23 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_remainder_is(&mut self, d: u32, r: u32) -> ExprRef {
-        assert!(d > 0);
-        assert!(r <= d);
-        self.mk(Expr::RemainderIs(d, r))
+    pub fn mk_remainder_is(&mut self, divisor: u32, remainder: u32, scale: u32, fractional_part: bool) -> ExprRef {
+        assert!(divisor > 0);
+        assert!(remainder <= divisor);
+        if !fractional_part {
+            self.mk(Expr::RemainderIs { divisor, remainder, scale, fractional_part })
+        } else {
+            let achievable = check_remainder(divisor, divisor - remainder, scale);
+            if !achievable {
+                return ExprRef::NO_MATCH;
+            }
+            if scale == 0 {
+                // Otherwise we would have not been achievable
+                assert_eq!(remainder, 0);
+                return ExprRef::EMPTY_STRING; // or trailing zeroes perhaps?
+            }
+            self.mk(Expr::RemainderIs { divisor, remainder, scale, fractional_part })
+        }
     }
 
     // this avoids allocation when hitting the hash-cons
