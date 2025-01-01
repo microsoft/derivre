@@ -269,3 +269,8 @@ fn test_remainder_is_relevance() {
     remainder_is_empty(3, 0, "[a-z]*");
     remainder_is_empty(2, 0, "[3579]+");
 }
+
+#[test]
+fn test_remainder_is_relevance_fractional() {
+    remainder_is_non_empty(2, 1, r"[0-9]+\.[0-9]");
+}
