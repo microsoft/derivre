@@ -278,4 +278,27 @@ fn test_remainder_is_relevance() {
 #[test]
 fn test_remainder_is_relevance_fractional() {
     remainder_is_non_empty(2, 1, r"[0-9]+\.[0-9]");
+    remainder_is_non_empty(3, 1, r"[0-9]+\.[0369]"); // e.g. 3.0, 3.3, ...
+    remainder_is_non_empty(3, 1, r"[0-9]+\.2"); // e.g. 1.2
+    remainder_is_empty(2, 1, r"[0-9]+\.[3579]");
+    remainder_is_empty(3, 1, r"[12]\.[0369]");
+
+    // 2.x can be a multiple of 2.125
+    remainder_is_non_empty(2125, 3, r"2\.[0-9]+");
+    // 1.x can never be a multiple of 2.125
+    remainder_is_empty(2125, 3, r"1(\.[0-9]+)?");
+
+    // 2.1x can be a multiple of 2.125
+    remainder_is_non_empty(2125, 3, r"2\.1[0-9]*");
+    // 2.0x can never be a multiple of 2.125
+    remainder_is_empty(2125, 3, r"2\.0[0-9]*");
+    // 2.2x can never be a multiple of 2.125
+    remainder_is_empty(2125, 3, r"2\.2[0-9]*");
+
+    // 2.12x can be a multiple of 2.125
+    remainder_is_non_empty(2125, 3, r"2\.12[0-9]*");
+    // 2.11x can never be a multiple of 2.125
+    remainder_is_empty(2125, 3, r"2\.11[0-9]*");
+    // 2.13x can never be a multiple of 2.125
+    remainder_is_empty(2125, 3, r"2\.13[0-9]*");
 }
