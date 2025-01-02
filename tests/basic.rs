@@ -1,4 +1,4 @@
-use derivre::{JsonQuoteOptions, NextByte, Regex, RegexBuilder};
+use derivre::{JsonQuoteOptions, NextByte, Regex, RegexAst, RegexBuilder};
 
 fn check_is_match(rx: &mut Regex, s: &str, exp: bool) {
     if rx.is_match(s) == exp {
@@ -340,8 +340,12 @@ fn check_json_quote(
     should_not_match: &[&str],
 ) {
     let mut b = RegexBuilder::new();
-    let e = b.mk_regex(rx).unwrap();
-    let e = b.json_quote(e, options).unwrap();
+    let e = b
+        .mk(&RegexAst::JsonQuote(
+            Box::new(RegexAst::Regex(rx.to_string())),
+            options.clone(),
+        ))
+        .unwrap();
     let mut rx = b.to_regex(e);
     match_many(&mut rx, should_match);
     no_match_many(&mut rx, should_not_match);

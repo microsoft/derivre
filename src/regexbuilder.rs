@@ -96,6 +96,9 @@ pub enum RegexAst {
     /// Matches any byte in the set, expressed as bitset.
     /// Can lead to invalid utf8 if the set is not a subset of 0..127
     ByteSet(Vec<u32>),
+    /// Quote the regex as a JSON string.
+    /// For example, [A-Z\n]+ becomes ([A-Z]|\\n)+
+    JsonQuote(Box<RegexAst>, JsonQuoteOptions),
     /// Reference previously built regex
     ExprRef(ExprRef),
 }
@@ -110,9 +113,10 @@ impl RegexAst {
     pub fn get_args(&self) -> &[RegexAst] {
         match self {
             RegexAst::And(asts) | RegexAst::Or(asts) | RegexAst::Concat(asts) => asts,
-            RegexAst::LookAhead(ast) | RegexAst::Not(ast) | RegexAst::Repeat(ast, _, _) => {
-                std::slice::from_ref(ast)
-            }
+            RegexAst::LookAhead(ast)
+            | RegexAst::Not(ast)
+            | RegexAst::Repeat(ast, _, _)
+            | RegexAst::JsonQuote(ast, _) => std::slice::from_ref(ast),
             RegexAst::EmptyString
             | RegexAst::MultipleOf(_)
             | RegexAst::NoMatch
@@ -142,6 +146,7 @@ impl RegexAst {
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
             RegexAst::MultipleOf(_) => "MultipleOf",
+            RegexAst::JsonQuote(_, _) => "JsonQuote",
         }
     }
 
@@ -197,6 +202,9 @@ impl RegexAst {
                 }
                 RegexAst::MultipleOf(d) => {
                     dst.push_str(&format!(" % {} == 0 ", d));
+                }
+                RegexAst::JsonQuote(_, opts) => {
+                    dst.push_str(&format!(" {:?}", opts));
                 }
                 RegexAst::EmptyString | RegexAst::NoMatch => {}
             }
@@ -461,6 +469,7 @@ impl RegexBuilder {
             |ast, new_args| {
                 let r = match ast {
                     RegexAst::Regex(s) => self.mk_regex(s)?,
+                    RegexAst::JsonQuote(_, opts) => self.json_quote(new_args[0], opts)?,
                     RegexAst::ExprRef(r) => {
                         ensure!(self.exprset.is_valid(*r), "invalid ref");
                         *r
