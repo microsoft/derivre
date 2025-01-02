@@ -409,7 +409,12 @@ impl RegexBuilder {
                         exprset.mk_byte(b)
                     }
                 }
-                Expr::RemainderIs { divisor, remainder, scale, fractional_part} => exprset.mk_remainder_is(divisor, remainder, scale, fractional_part),
+                Expr::RemainderIs {
+                    divisor,
+                    remainder,
+                    scale,
+                    fractional_part,
+                } => exprset.mk_remainder_is(divisor, remainder, scale, fractional_part),
                 Expr::And(_, _) => exprset.mk_and(args),
                 Expr::Or(_, _) => exprset.mk_or(args),
                 Expr::Concat(_, _) => exprset.mk_concat(args),

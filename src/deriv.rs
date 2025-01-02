@@ -69,7 +69,12 @@ impl DerivCache {
                             ExprRef::NO_MATCH
                         }
                     }
-                    Expr::RemainderIs { divisor, remainder, scale, fractional_part } => {
+                    Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    } => {
                         if let Some(idx) = exprs.digits.iter().position(|&x| x == b) {
                             let (remainder, scale) = if !fractional_part {
                                 (remainder * 10, scale)
@@ -84,7 +89,7 @@ impl DerivCache {
                                 divisor,
                                 (remainder + (idx as u32) * 10_u32.pow(scale)) % divisor,
                                 scale,
-                                fractional_part
+                                fractional_part,
                             )
                         } else if b == exprs.digit_dot && !fractional_part && scale > 0 {
                             exprs.mk_remainder_is(divisor, remainder, scale, true)

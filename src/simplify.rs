@@ -385,11 +385,22 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_remainder_is(&mut self, divisor: u32, remainder: u32, scale: u32, fractional_part: bool) -> ExprRef {
+    pub fn mk_remainder_is(
+        &mut self,
+        divisor: u32,
+        remainder: u32,
+        scale: u32,
+        fractional_part: bool,
+    ) -> ExprRef {
         assert!(divisor > 0);
         assert!(remainder <= divisor);
         if !fractional_part {
-            self.mk(Expr::RemainderIs { divisor, remainder, scale, fractional_part })
+            self.mk(Expr::RemainderIs {
+                divisor,
+                remainder,
+                scale,
+                fractional_part,
+            })
         } else {
             let achievable = check_remainder(divisor, divisor - remainder, scale);
             if !achievable {
@@ -400,7 +411,12 @@ impl ExprSet {
                 assert_eq!(remainder, 0);
                 return ExprRef::EMPTY_STRING; // or trailing zeroes perhaps?
             }
-            self.mk(Expr::RemainderIs { divisor, remainder, scale, fractional_part })
+            self.mk(Expr::RemainderIs {
+                divisor,
+                remainder,
+                scale,
+                fractional_part,
+            })
         }
     }
 

@@ -9,9 +9,9 @@ mod pp;
 mod regex;
 mod regexbuilder;
 mod relevance;
+mod remainder;
 mod simplify;
 mod syntax;
-mod remainder;
 
 pub use ast::{ExprRef, NextByte};
 pub use regex::{AlphabetInfo, Regex, StateID};

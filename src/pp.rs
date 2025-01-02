@@ -213,7 +213,9 @@ impl PrettyPrinter {
                     write!(f, "{{{}, {}}}", min, max)
                 }
             }
-            Expr::RemainderIs { divisor, remainder, .. } => {
+            Expr::RemainderIs {
+                divisor, remainder, ..
+            } => {
                 write!(f, "( % {} == {} )", divisor, remainder)
             }
             Expr::Concat(_, es) => self.write_concat(exprset, es, f, max_len),

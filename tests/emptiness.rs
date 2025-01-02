@@ -233,14 +233,19 @@ fn test_multiple_of_fractional() {
             for t in 0..(7 * d) {
                 let integer_part = t / scale_factor;
                 let fractional_part = t % scale_factor;
-                let s = format!("{}.{:0>width$}", integer_part, fractional_part, width = scale as usize);
+                let s = format!(
+                    "{}.{:0>width$}",
+                    integer_part,
+                    fractional_part,
+                    width = scale as usize
+                );
                 assert_eq!(rx.is_match(&s), t % d == 0, "{} % {} == {}", t, d, t % d);
             }
         }
     }
 }
 
-fn remainder_is_check(should_be_empty: bool, d: u32, s:u32, other_rx: &str) {
+fn remainder_is_check(should_be_empty: bool, d: u32, s: u32, other_rx: &str) {
     let mut bld = RegexBuilder::new();
     let id = bld
         .mk(&RegexAst::And(vec![
