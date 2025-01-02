@@ -9,6 +9,7 @@ mod pp;
 mod regex;
 mod regexbuilder;
 mod relevance;
+mod remainder;
 mod simplify;
 mod syntax;
 
