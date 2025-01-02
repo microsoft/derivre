@@ -153,7 +153,12 @@ impl RelevanceCache {
                     // just unwrap lookaheads
                     Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
 
-                    Expr::RemainderIs {divisor, remainder, scale, fractional_part} => {
+                    Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    } => {
                         let mut result = vec![];
                         for i in 0..10 {
                             let b = exprs.mk_byte(exprs.digits[i]);
@@ -176,7 +181,7 @@ impl RelevanceCache {
                             result.push((b, r));
                         }
                         if !fractional_part && scale > 0 {
-                            let b = exprs.mk_byte(b'.');
+                            let b = exprs.mk_byte(exprs.digit_dot);
                             let r = exprs.mk_remainder_is(divisor, remainder, scale, true);
                             result.push((b, r));
                         }

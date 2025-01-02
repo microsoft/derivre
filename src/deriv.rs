@@ -86,8 +86,7 @@ impl DerivCache {
                                 scale,
                                 fractional_part
                             )
-                        } else if b == exprs.digits.len() as u8 && !fractional_part && scale > 0 {
-                            // TODO: better way to refer to the decimal point?
+                        } else if b == exprs.digit_dot && !fractional_part && scale > 0 {
                             exprs.mk_remainder_is(divisor, remainder, scale, true)
                         } else {
                             ExprRef::NO_MATCH

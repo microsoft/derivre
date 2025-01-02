@@ -261,8 +261,19 @@ impl<'a> Expr<'a> {
         match self {
             Expr::EmptyString => trg.push_u32(flags.encode(ExprTag::EmptyString)),
             Expr::NoMatch => trg.push_u32(flags.encode(ExprTag::NoMatch)),
-            Expr::RemainderIs { divisor, remainder, scale, fractional_part} => {
-                trg.push_slice(&[flags.encode(ExprTag::RemainderIs), *divisor, *remainder, *scale, *fractional_part as u32]);
+            Expr::RemainderIs {
+                divisor,
+                remainder,
+                scale,
+                fractional_part,
+            } => {
+                trg.push_slice(&[
+                    flags.encode(ExprTag::RemainderIs),
+                    *divisor,
+                    *remainder,
+                    *scale,
+                    *fractional_part as u32,
+                ]);
             }
             Expr::Byte(b) => {
                 trg.push_slice(&[flags.encode(ExprTag::Byte), *b as u32]);
@@ -291,6 +302,7 @@ pub struct ExprSet {
     pub(crate) alphabet_size: usize,
     pub(crate) alphabet_words: usize,
     pub(crate) digits: [u8; 10],
+    pub(crate) digit_dot: u8,
     pub(crate) cost: u64,
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
@@ -305,10 +317,8 @@ impl ExprSet {
             exprs,
             alphabet_size,
             alphabet_words,
-            digits: [
-                '0' as u8, '1' as u8, '2' as u8, '3' as u8, '4' as u8, '5' as u8, '6' as u8,
-                '7' as u8, '8' as u8, '9' as u8,
-            ],
+            digits: [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'],
+            digit_dot: b'.',
             cost: 0,
             pp: PrettyPrinter::new_simple(alphabet_size),
             optimize: true,
