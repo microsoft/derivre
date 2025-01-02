@@ -1,5 +1,5 @@
 /// Checks if there exists a sequence of n numbers A_0, ..., A_{n-1} such that
-/// A_0 * 10^0 + ... + A_{n-1} * 10^{-1} = remainder (mod divisor)
+/// A_0 * 10^0 + ... + A_{n-1} * 10^{n-1} = remainder (mod divisor)
 pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
     // Normalize remainder
     let remainder = remainder % divisor;
