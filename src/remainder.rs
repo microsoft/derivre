@@ -20,9 +20,7 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
 
     for i in 0..n {
         // Clear the 'next' array for the current iteration
-        for entry in next.iter_mut() {
-            *entry = false;
-        }
+        next.fill(false);
         for rem in 0..divisor {
             if current[rem as usize] {
                 for digit in 0..=9 {
