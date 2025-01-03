@@ -407,15 +407,13 @@ impl ExprSet {
                 true
             } else {
                 let scale_multiplier = 10u32.pow(scale);
-                if scale_multiplier >= divisor {
+                if scale_multiplier > remainder_to_go {
                     // n is large enough that we can guarantee a solution
                     true
-                } else if scale_multiplier - 1 < remainder_to_go {
+                } else {
                     // We can't possibly reach remainder with n digits
                     // Note this includes the case where n == 0 and remainder != 0
                     false
-                } else {
-                    true
                 }
             };
             if !achievable {
