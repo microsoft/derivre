@@ -402,34 +402,40 @@ impl ExprSet {
             })
         } else {
             let remainder_to_go = (divisor - remainder) % divisor;
-            let achievable = if remainder_to_go == 0 {
-                // Trivial
-                true
+            if remainder_to_go == 0 {
+                if scale == 0 {
+                    // We're done
+                    ExprRef::EMPTY_STRING
+                } else {
+                    // Trivial
+                    self.mk(Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    })
+                }
             } else {
                 let scale_multiplier = 10u32.pow(scale);
                 if scale_multiplier > remainder_to_go {
                     // n is large enough that we can guarantee a solution
-                    true
+                    if scale_multiplier <= divisor {
+                        let forced_digits =
+                            format!("{:0>width$}", remainder_to_go, width = scale as usize);
+                        // TODO: trim trailing zeros?
+                        self.mk_literal(&forced_digits)
+                    } else {
+                        self.mk(Expr::RemainderIs {
+                            divisor,
+                            remainder,
+                            scale,
+                            fractional_part,
+                        })
+                    }
                 } else {
-                    // We can't possibly reach remainder with n digits
-                    // Note this includes the case where n == 0 and remainder != 0
-                    false
+                    ExprRef::NO_MATCH
                 }
-            };
-            if !achievable {
-                return ExprRef::NO_MATCH;
             }
-            if scale == 0 {
-                // Otherwise we would have not been achievable
-                assert_eq!(remainder, 0);
-                return ExprRef::EMPTY_STRING; // or trailing zeroes perhaps?
-            }
-            self.mk(Expr::RemainderIs {
-                divisor,
-                remainder,
-                scale,
-                fractional_part,
-            })
         }
     }
 
