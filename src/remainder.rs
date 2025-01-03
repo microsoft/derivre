@@ -61,16 +61,19 @@ fn check_remainder_simple(divisor: u32, remainder: u32, n: u32) -> Option<bool> 
     if remainder == 0 {
         // Trivial
         Some(true)
-    } else if 10_u32.pow(n) - 1 < remainder {
-        // We can't possibly reach remainder with n digits
-        // Note this includes the case where n == 0 and remainder != 0
-        Some(false)
-    } else if ((divisor as f32).log10().ceil() as u32) < n {
-        // n is large enough that we can guarantee a solution
-        Some(true)
     } else {
-        // No guarantee either way -- need to use DP
-        None
+        let scale_multiplier = 10u32.pow(n);
+        if scale_multiplier > divisor {
+            // n is large enough that we can guarantee a solution
+            Some(true)
+        } else if scale_multiplier - 1 < remainder {
+            // We can't possibly reach remainder with n digits
+            // Note this includes the case where n == 0 and remainder != 0
+            Some(false)
+        } else {
+            // No guarantee either way -- need to use DP
+            None
+        }
     }
 }
 
