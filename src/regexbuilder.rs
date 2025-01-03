@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{ensure, Result};
+use hashbrown::HashMap;
 use regex_syntax::ParserBuilder;
 
 use crate::{
@@ -17,6 +18,7 @@ use crate::{
 pub struct RegexBuilder {
     parser_builder: ParserBuilder,
     exprset: ExprSet,
+    json_quote_cache: HashMap<ExprRef, ExprRef>,
 }
 
 #[derive(Clone, Debug)]
@@ -228,6 +230,7 @@ impl RegexBuilder {
         Self {
             parser_builder: ParserBuilder::new(),
             exprset: ExprSet::new(256),
+            json_quote_cache: HashMap::new(),
         }
     }
 
@@ -387,41 +390,49 @@ impl RegexBuilder {
             );
         }
 
-        let r = self.exprset.simple_map(e, |exprset, args, e| -> ExprRef {
-            match exprset.get(e) {
-                Expr::EmptyString => ExprRef::EMPTY_STRING,
-                Expr::NoMatch => ExprRef::NO_MATCH,
-                Expr::ByteSet(bs) => {
-                    let bs = bs.to_vec();
-                    let has_bytes_below_0x20 = bs[0] != 0;
-                    if has_bytes_below_0x20
-                        || byteset_contains(&bs, b'\\' as usize)
-                        || byteset_contains(&bs, b'"' as usize)
-                        || byteset_contains(&bs, 0x7F)
-                    {
-                        quote_byteset(exprset, bs, &options)
-                    } else {
-                        // no need to quote
-                        exprset.mk_byte_set(&bs)
+        let r = self.exprset.map(
+            e,
+            &mut self.json_quote_cache,
+            false,
+            |e| e,
+            |exprset, args, e| -> ExprRef {
+                match exprset.get(e) {
+                    Expr::ByteSet(bs) => {
+                        let has_bytes_below_0x20 = bs[0] != 0;
+                        if has_bytes_below_0x20
+                            || byteset_contains(&bs, b'\\' as usize)
+                            || byteset_contains(&bs, b'"' as usize)
+                            || byteset_contains(&bs, 0x7F)
+                        {
+                            let bs = bs.to_vec();
+                            quote_byteset(exprset, bs, &options)
+                        } else {
+                            // no need to quote
+                            e
+                        }
                     }
-                }
-                Expr::Byte(b) => {
-                    if b < 0x20 || b"\"\\\x7F".contains(&b) {
-                        quote_byteset(exprset, byteset_from_range(b, b), &options)
-                    } else {
-                        // no need to quote
-                        exprset.mk_byte(b)
+                    Expr::Byte(b) => {
+                        if b < 0x20 || b"\"\\\x7F".contains(&b) {
+                            quote_byteset(exprset, byteset_from_range(b, b), &options)
+                        } else {
+                            // no need to quote
+                            e
+                        }
                     }
+                    // always identity
+                    Expr::EmptyString | Expr::NoMatch | Expr::RemainderIs(_, _) => e,
+                    // if all args map to themselves, return back the same expression
+                    x if x.args() == args => e,
+                    // otherwise, actually map the args
+                    Expr::And(_, _) => exprset.mk_and(args),
+                    Expr::Or(_, _) => exprset.mk_or(args),
+                    Expr::Concat(_, _) => exprset.mk_concat(args),
+                    Expr::Not(_, _) => exprset.mk_not(args[0]),
+                    Expr::Lookahead(_, _, _) => exprset.mk_lookahead(args[0], 0),
+                    Expr::Repeat(_, _, min, max) => exprset.mk_repeat(args[0], min, max),
                 }
-                Expr::RemainderIs(a, b) => exprset.mk_remainder_is(a, b),
-                Expr::And(_, _) => exprset.mk_and(args),
-                Expr::Or(_, _) => exprset.mk_or(args),
-                Expr::Concat(_, _) => exprset.mk_concat(args),
-                Expr::Not(_, _) => exprset.mk_not(args[0]),
-                Expr::Lookahead(_, _, _) => exprset.mk_lookahead(args[0], 0),
-                Expr::Repeat(_, _, min, max) => exprset.mk_repeat(args[0], min, max),
-            }
-        });
+            },
+        );
 
         let quote = self.exprset.mk_byte(b'"');
         let r = if options.raw_mode {
