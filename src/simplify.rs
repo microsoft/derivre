@@ -402,8 +402,7 @@ impl ExprSet {
                 fractional_part,
             })
         } else {
-            let (achievable, cost) = check_remainder(divisor, divisor - remainder, scale);
-            self.pay(cost);
+            let achievable = check_remainder(divisor, divisor - remainder, scale);
             if !achievable {
                 return ExprRef::NO_MATCH;
             }
