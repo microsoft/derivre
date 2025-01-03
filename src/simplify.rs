@@ -393,6 +393,7 @@ impl ExprSet {
     ) -> ExprRef {
         assert!(divisor > 0);
         assert!(remainder <= divisor);
+        self.pay(1);
         if !fractional_part {
             self.mk(Expr::RemainderIs {
                 divisor,
