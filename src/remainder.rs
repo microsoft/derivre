@@ -1,12 +1,16 @@
 /// Checks if there exists a sequence of n numbers A_0, ..., A_{n-1} such that
-/// A_0 * 10^0 + ... + A_{n-1} * 10^{n-1} = remainder (mod divisor)
-pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
+/// A_0 * 10^0 + ... + A_{n-1} * 10^{n-1} = remainder (mod divisor).
+/// Returns a boolean indicating whether such a sequence exists, and the cost of the solution
+/// expressed as the number of checks performed.
+pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> (bool, usize) {
+    let mut cost: usize = 1;
+
     // Normalize remainder
     let remainder = remainder % divisor;
 
     // Simple cases that don't require DP
     if let Some(result) = check_remainder_simple(divisor, remainder, n) {
-        return result;
+        return (result, cost);
     }
 
     // 1d DP table
@@ -28,10 +32,11 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
                     let new_rem = (rem + digit * powers[new_n as usize]) % divisor;
                     if let Some(elt) = next.get_mut(new_rem as usize) {
                         if !*elt {
+                            cost += 1;
                             let remainder_to_go = (remainder + divisor - new_rem) % divisor;
                             match check_remainder_simple(divisor, remainder_to_go, new_n) {
                                 // Found a solution
-                                Some(true) => return true,
+                                Some(true) => return (true, cost),
                                 // Prune this branch; it's a dead end
                                 Some(false) => {}
                                 // Continue with DP
@@ -48,7 +53,7 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
         // Swap 'current' and 'next' for the next iteration
         std::mem::swap(&mut current, &mut next);
     }
-    false
+    (false, cost)
 }
 
 #[inline]
