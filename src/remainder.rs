@@ -26,14 +26,21 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
                 for digit in 0..=9 {
                     let new_n = n - i - 1;
                     let new_rem = (rem + digit * powers[new_n as usize]) % divisor;
-                    let remainder_to_go = (remainder + divisor - new_rem) % divisor;
-                    match check_remainder_simple(divisor, remainder_to_go, new_n) {
-                        // Found a solution
-                        Some(true) => return true,
-                        // Prune this branch; it's a dead end
-                        Some(false) => {}
-                        // Continue with DP
-                        None => next[new_rem as usize] = true,
+                    if let Some(elt) = next.get_mut(new_rem as usize) {
+                        if !*elt {
+                            let remainder_to_go = (remainder + divisor - new_rem) % divisor;
+                            match check_remainder_simple(divisor, remainder_to_go, new_n) {
+                                // Found a solution
+                                Some(true) => return true,
+                                // Prune this branch; it's a dead end
+                                Some(false) => {}
+                                // Continue with DP
+                                None => *elt = true,
+                            }
+                        }
+                    } else {
+                        // This should never happen
+                        unreachable!();
                     }
                 }
             }
