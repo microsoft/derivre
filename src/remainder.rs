@@ -63,7 +63,7 @@ fn check_remainder_simple(divisor: u32, remainder: u32, n: u32) -> Option<bool> 
         Some(true)
     } else {
         let scale_multiplier = 10u32.pow(n);
-        if scale_multiplier > divisor {
+        if scale_multiplier >= divisor {
             // n is large enough that we can guarantee a solution
             Some(true)
         } else if scale_multiplier - 1 < remainder {
