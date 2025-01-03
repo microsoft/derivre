@@ -44,6 +44,7 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
     false
 }
 
+#[inline]
 fn check_remainder_simple(divisor: u32, remainder: u32, n: u32) -> Option<bool> {
     if remainder == 0 {
         // Trivial
