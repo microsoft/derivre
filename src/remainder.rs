@@ -28,7 +28,7 @@ pub fn check_remainder(divisor: u32, remainder: u32, n: u32) -> bool {
                     let new_rem = (rem + digit * powers[new_n as usize]) % divisor;
                     let remainder_to_go = (remainder + divisor - new_rem) % divisor;
                     match check_remainder_simple(divisor, remainder_to_go, new_n) {
-                        // Guaranteed solution, no need to continue
+                        // Found a solution
                         Some(true) => return true,
                         // Prune this branch; it's a dead end
                         Some(false) => {}
