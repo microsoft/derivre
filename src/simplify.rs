@@ -2,7 +2,6 @@ use crate::ast::{
     byteset_clear, byteset_contains, byteset_intersection, byteset_set, byteset_union, Expr,
     ExprFlags, ExprRef, ExprSet, ExprTag,
 };
-use crate::remainder::check_remainder;
 
 impl ExprSet {
     pub(crate) fn pay(&mut self, cost: usize) {
@@ -402,7 +401,23 @@ impl ExprSet {
                 fractional_part,
             })
         } else {
-            let achievable = check_remainder(divisor, divisor - remainder, scale);
+            let remainder_to_go = (divisor - remainder) % divisor;
+            let achievable = if remainder_to_go == 0 {
+                // Trivial
+                true
+            } else {
+                let scale_multiplier = 10u32.pow(scale);
+                if scale_multiplier >= divisor {
+                    // n is large enough that we can guarantee a solution
+                    true
+                } else if scale_multiplier - 1 < remainder_to_go {
+                    // We can't possibly reach remainder with n digits
+                    // Note this includes the case where n == 0 and remainder != 0
+                    false
+                } else {
+                    true
+                }
+            };
             if !achievable {
                 return ExprRef::NO_MATCH;
             }
