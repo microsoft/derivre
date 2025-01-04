@@ -402,28 +402,27 @@ impl ExprSet {
                 fractional_part,
             })
         } else {
+            if scale == 0 && remainder == 0 {
+                // We're done
+                return ExprRef::EMPTY_STRING;
+            }
             let scale_multiplier = 10u32.pow(scale);
             let remainder_to_go = (divisor - remainder) % divisor;
             if remainder_to_go < scale_multiplier {
-                if scale == 0 && remainder_to_go == 0 {
-                    // We're done
-                    ExprRef::EMPTY_STRING
+                if scale_multiplier <= divisor {
+                    // If our scale has shrunken smaller than our divisor, we can force the rest
+                    // of the digits
+                    let forced_digits =
+                        format!("{:0>width$}", remainder_to_go, width = scale as usize);
+                    // TODO: trim trailing zeros?
+                    self.mk_literal(&forced_digits)
                 } else {
-                    if scale_multiplier <= divisor {
-                        // If our scale has shrunken smaller than our divisor, we can force the rest
-                        // of the digits
-                        let forced_digits =
-                            format!("{:0>width$}", remainder_to_go, width = scale as usize);
-                        // TODO: trim trailing zeros?
-                        self.mk_literal(&forced_digits)
-                    } else {
-                        self.mk(Expr::RemainderIs {
-                            divisor,
-                            remainder,
-                            scale,
-                            fractional_part,
-                        })
-                    }
+                    self.mk(Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    })
                 }
             } else {
                 ExprRef::NO_MATCH
