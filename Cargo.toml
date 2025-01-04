@@ -18,7 +18,6 @@ regex-syntax = { version = "0.8.3" }
 serde = { version = "1.0.203", features = ["derive"] }
 toml = "0.8.13"
 bstr = { version = "1.9.1", default-features = false, features = ["std", "serde"] }
-criterion = { version = "0.5" }
 
 [[bin]]
 name = "derivre"
@@ -28,7 +27,3 @@ path = "src/derivre.rs"
 default = ["compress"]
 # default = []
 compress = []
-
-[[bench]]
-name = "remainder"
-harness = false
