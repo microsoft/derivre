@@ -402,25 +402,16 @@ impl ExprSet {
                 fractional_part,
             })
         } else {
+            let scale_multiplier = 10u32.pow(scale);
             let remainder_to_go = (divisor - remainder) % divisor;
-            if remainder_to_go == 0 {
-                if scale == 0 {
+            if remainder_to_go < scale_multiplier {
+                if scale == 0 && remainder_to_go == 0 {
                     // We're done
                     ExprRef::EMPTY_STRING
                 } else {
-                    // Trivial
-                    self.mk(Expr::RemainderIs {
-                        divisor,
-                        remainder,
-                        scale,
-                        fractional_part,
-                    })
-                }
-            } else {
-                let scale_multiplier = 10u32.pow(scale);
-                if scale_multiplier > remainder_to_go {
-                    // n is large enough that we can guarantee a solution
                     if scale_multiplier <= divisor {
+                        // If our scale has shrunken smaller than our divisor, we can force the rest
+                        // of the digits
                         let forced_digits =
                             format!("{:0>width$}", remainder_to_go, width = scale as usize);
                         // TODO: trim trailing zeros?
@@ -433,9 +424,9 @@ impl ExprSet {
                             fractional_part,
                         })
                     }
-                } else {
-                    ExprRef::NO_MATCH
                 }
+            } else {
+                ExprRef::NO_MATCH
             }
         }
     }
