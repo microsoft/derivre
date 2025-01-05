@@ -415,7 +415,12 @@ impl ExprSet {
                     let forced_digits =
                         format!("{:0>width$}", remainder_to_go, width = scale as usize);
                     // TODO: trim trailing zeros?
-                    self.mk_literal(&forced_digits)
+                    let mapped = forced_digits
+                        .as_bytes()
+                        .iter()
+                        .map(|b| self.digits[(b - b'0') as usize])
+                        .collect::<Vec<_>>();
+                    self.mk_byte_literal(&mapped)
                 } else {
                     self.pay(1);
                     self.mk(Expr::RemainderIs {
