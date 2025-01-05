@@ -80,9 +80,9 @@ pub enum RegexAst {
     /// Repeat the regex at least min times, at most max times
     /// u32::MAX means infinity
     Repeat(Box<RegexAst>, u32, u32),
-    /// MultipleOf(d) matches if the input, interpreted as decimal ASCII number, is a multiple of d.
+    /// MultipleOf(d, s) matches if the input, interpreted as decimal ASCII number, is a multiple of d*10^-s.
     /// EmptyString is not included.
-    MultipleOf(u32),
+    MultipleOf(u32, u32),
     /// Matches the empty string. Same as Concat([]).
     EmptyString,
     /// Matches nothing. Same as Or([]).
@@ -120,7 +120,7 @@ impl RegexAst {
             | RegexAst::Repeat(ast, _, _)
             | RegexAst::JsonQuote(ast, _) => std::slice::from_ref(ast),
             RegexAst::EmptyString
-            | RegexAst::MultipleOf(_)
+            | RegexAst::MultipleOf(_, _)
             | RegexAst::NoMatch
             | RegexAst::Regex(_)
             | RegexAst::Literal(_)
@@ -147,7 +147,7 @@ impl RegexAst {
             RegexAst::Repeat(_, _, _) => "Repeat",
             RegexAst::Byte(_) => "Byte",
             RegexAst::ByteSet(_) => "ByteSet",
-            RegexAst::MultipleOf(_) => "MultipleOf",
+            RegexAst::MultipleOf(_, _) => "MultipleOf",
             RegexAst::JsonQuote(_, _) => "JsonQuote",
         }
     }
@@ -202,8 +202,12 @@ impl RegexAst {
                 RegexAst::Repeat(_, min, max) => {
                     dst.push_str(&format!("{{{},{}}} ", min, max));
                 }
-                RegexAst::MultipleOf(d) => {
-                    dst.push_str(&format!(" % {} == 0 ", d));
+                RegexAst::MultipleOf(d, s) => {
+                    if *s == 0 {
+                        dst.push_str(&format!(" % {} == 0 ", d));
+                    } else {
+                        dst.push_str(&format!(" % {}x10^-{} == 0", d, s));
+                    }
                 }
                 RegexAst::JsonQuote(_, opts) => {
                     dst.push_str(&format!(" {:?}", opts));
@@ -420,7 +424,7 @@ impl RegexBuilder {
                         }
                     }
                     // always identity
-                    Expr::EmptyString | Expr::NoMatch | Expr::RemainderIs(_, _) => e,
+                    Expr::EmptyString | Expr::NoMatch | Expr::RemainderIs { .. } => e,
                     // if all args map to themselves, return back the same expression
                     x if x.args() == args => e,
                     // otherwise, actually map the args
@@ -497,9 +501,9 @@ impl RegexBuilder {
                     RegexAst::Repeat(_, min, max) => {
                         self.exprset.mk_repeat(new_args[0], *min, *max)
                     }
-                    RegexAst::MultipleOf(d) => {
+                    RegexAst::MultipleOf(d, s) => {
                         ensure!(*d > 0, "invalid multiple of");
-                        self.exprset.mk_remainder_is(*d, *d)
+                        self.exprset.mk_remainder_is(*d, *d, *s, false)
                     }
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {

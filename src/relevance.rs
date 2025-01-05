@@ -153,15 +153,40 @@ impl RelevanceCache {
                     // just unwrap lookaheads
                     Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
 
-                    Expr::RemainderIs(d, r) => (0..10)
-                        .map(|i| {
-                            (
-                                exprs.mk_byte(exprs.digits[i]),
-                                exprs.mk_remainder_is(d, (r * 10 + i as u32) % d),
-                            )
-                        })
-                        .collect(),
-
+                    Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    } => {
+                        let mut result = vec![];
+                        for i in 0..10 {
+                            let b = exprs.mk_byte(exprs.digits[i]);
+                            let (remainder, scale) = if !fractional_part {
+                                (remainder * 10, scale)
+                            } else {
+                                if scale == 0 {
+                                    // Dead code?
+                                    result.push((b, ExprRef::NO_MATCH));
+                                    continue;
+                                }
+                                (remainder, scale - 1)
+                            };
+                            let r = exprs.mk_remainder_is(
+                                divisor,
+                                (remainder + (i as u32) * 10_u32.pow(scale)) % divisor,
+                                scale,
+                                fractional_part,
+                            );
+                            result.push((b, r));
+                        }
+                        if !fractional_part && scale > 0 {
+                            let b = exprs.mk_byte(exprs.digit_dot);
+                            let r = exprs.mk_remainder_is(divisor, remainder, scale, true);
+                            result.push((b, r));
+                        }
+                        result
+                    }
                     Expr::And(_, _) => {
                         let mut acc = deriv.pop().unwrap();
                         while let Some(other) = deriv.pop() {

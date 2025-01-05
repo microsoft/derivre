@@ -70,7 +70,12 @@ impl ByteCompressor {
                 Expr::Lookahead(_, _, x) => trg.mk_lookahead(args[0], x),
                 Expr::Not(_, _) => trg.mk_not(args[0]),
                 Expr::Repeat(_, _, x, y) => trg.mk_repeat(args[0], x, y),
-                Expr::RemainderIs(a, b) => trg.mk_remainder_is(a, b),
+                Expr::RemainderIs {
+                    divisor,
+                    remainder,
+                    scale,
+                    fractional_part,
+                } => trg.mk_remainder_is(divisor, remainder, scale, fractional_part),
                 Expr::Concat(_, _) => trg.mk_concat(&mut args),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
@@ -102,9 +107,14 @@ impl ByteCompressor {
             match exprset.get(e) {
                 Expr::Byte(b) => self.add_single_byte(b),
                 Expr::ByteSet(bs) => self.bytesets.push(bs.to_vec()),
-                Expr::RemainderIs(_, _) => {
+                Expr::RemainderIs { scale, .. } => {
                     for b in exprset.digits {
                         self.add_single_byte(b);
+                    }
+                    // if scale==0 then it will only match integers
+                    // and we don't need to distinguish the dot
+                    if scale > 0 {
+                        self.add_single_byte(exprset.digit_dot);
                     }
                 }
                 _ => {}
@@ -122,9 +132,10 @@ impl ByteCompressor {
         }
 
         let mut trg = ExprSet::new(self.alphabet_size);
-        for digit in 0..=9 {
-            trg.digits[digit] = self.mapping['0' as usize + digit as usize];
+        for digit in 0..trg.digits.len() {
+            trg.digits[digit] = self.mapping[exprset.digits[digit] as usize];
         }
+        trg.digit_dot = self.mapping[exprset.digit_dot as usize];
         let res_exprs: Vec<ExprRef> = rx_list
             .iter()
             .map(|&e| self.map_expr(&mut trg, exprset, e))

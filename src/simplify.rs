@@ -384,10 +384,55 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_remainder_is(&mut self, d: u32, r: u32) -> ExprRef {
-        assert!(d > 0);
-        assert!(r <= d);
-        self.mk(Expr::RemainderIs(d, r))
+    pub fn mk_remainder_is(
+        &mut self,
+        divisor: u32,
+        remainder: u32,
+        scale: u32,
+        fractional_part: bool,
+    ) -> ExprRef {
+        assert!(divisor > 0);
+        assert!(remainder <= divisor);
+        self.pay(1);
+        if !fractional_part {
+            self.mk(Expr::RemainderIs {
+                divisor,
+                remainder,
+                scale,
+                fractional_part,
+            })
+        } else {
+            if scale == 0 && remainder == 0 {
+                // We're done
+                return ExprRef::EMPTY_STRING;
+            }
+            let scale_multiplier = 10u32.pow(scale);
+            let remainder_to_go = (divisor - remainder) % divisor;
+            if remainder_to_go < scale_multiplier {
+                if scale_multiplier <= divisor {
+                    // If our scale has shrunken smaller than our divisor, we can force the rest
+                    // of the digits
+                    let forced_digits =
+                        format!("{:0>width$}", remainder_to_go, width = scale as usize);
+                    // TODO: trim trailing zeros?
+                    let mapped = forced_digits
+                        .as_bytes()
+                        .iter()
+                        .map(|b| self.digits[(b - b'0') as usize])
+                        .collect::<Vec<_>>();
+                    self.mk_byte_literal(&mapped)
+                } else {
+                    self.mk(Expr::RemainderIs {
+                        divisor,
+                        remainder,
+                        scale,
+                        fractional_part,
+                    })
+                }
+            } else {
+                ExprRef::NO_MATCH
+            }
+        }
     }
 
     // this avoids allocation when hitting the hash-cons
