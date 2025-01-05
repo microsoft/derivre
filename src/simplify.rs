@@ -393,8 +393,8 @@ impl ExprSet {
     ) -> ExprRef {
         assert!(divisor > 0);
         assert!(remainder <= divisor);
+        self.pay(1);
         if !fractional_part {
-            self.pay(1);
             self.mk(Expr::RemainderIs {
                 divisor,
                 remainder,
@@ -422,7 +422,6 @@ impl ExprSet {
                         .collect::<Vec<_>>();
                     self.mk_byte_literal(&mapped)
                 } else {
-                    self.pay(1);
                     self.mk(Expr::RemainderIs {
                         divisor,
                         remainder,
