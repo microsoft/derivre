@@ -356,8 +356,8 @@ fn test_json_quote() {
     let mut b = RegexBuilder::new();
 
     for options in [
-        JsonQuoteOptions::no_unicode(),
-        JsonQuoteOptions::with_unicode(),
+        JsonQuoteOptions::no_unicode_raw(),
+        JsonQuoteOptions::with_unicode_raw(),
     ] {
         let e = b.mk_regex(r#"[abc"]"#).unwrap();
         let e = b.json_quote(e, &options).unwrap();
@@ -383,7 +383,7 @@ fn test_json_quote() {
 #[test]
 fn test_json_qbig() {
     let mut b = RegexBuilder::new();
-    let options = JsonQuoteOptions::with_unicode();
+    let options = JsonQuoteOptions::with_unicode_raw();
     let rx = "\\w+[\\\\](\\w+\\.)*\\w+\\.dll";
     // let rx = "a[\\\\]b";
     let t0 = std::time::Instant::now();
@@ -400,7 +400,7 @@ fn test_json_qbig() {
 #[test]
 fn test_json_uxxxx() {
     let mut b = RegexBuilder::new();
-    let options = JsonQuoteOptions::with_unicode();
+    let options = JsonQuoteOptions::with_unicode_raw();
     let e0 = b.mk_regex(".").unwrap();
     let e = b.json_quote(e0, &options).unwrap();
     let mut rx = b.to_regex(e);
@@ -418,7 +418,7 @@ fn test_json_uxxxx() {
 #[test]
 fn test_json_and() {
     let mut b = RegexBuilder::new();
-    let options = JsonQuoteOptions::with_unicode();
+    let options = JsonQuoteOptions::with_unicode_raw();
 
     let e0 = b.mk_regex_and(&["[a-z]+", "(foo|bar|Baz)"]).unwrap();
     let e = b.json_quote(e0, &options).unwrap();

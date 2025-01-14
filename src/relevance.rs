@@ -416,6 +416,38 @@ impl RelevanceCache {
             return Ok(*r);
         }
 
+        // println!("relevance: {}", exprs.expr_to_string(top_expr));
+
+        match exprs.get(top_expr) {
+            Expr::Concat(_, args) => {
+                let mut non_pos: Vec<_> = args
+                    .iter()
+                    .map(|e| *e)
+                    .filter(|e| !exprs.is_positive(*e))
+                    .collect();
+                if non_pos.len() != args.len() {
+                    let inner = exprs.mk_concat(&mut non_pos);
+                    return self.is_non_empty_inner(exprs, inner);
+                }
+            }
+            Expr::And(_, &[e0, e1]) => match (exprs.get(e0), exprs.get(e1)) {
+                (Expr::Repeat(_, e0, min0, max0), Expr::Repeat(_, e1, min1, max1)) => {
+                    let min2 = std::cmp::max(min0, min1);
+                    let max2 = std::cmp::min(max0, max1);
+                    if min2 <= max2 {
+                        // ranges intersect
+                        let e2 = exprs.mk_and(&mut vec![e0, e1]);
+                        if let Ok(true) = self.is_non_empty_inner(exprs, e2) {
+                            self.relevance_cache.insert(top_expr, true);
+                            return Ok(true);
+                        }
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
         let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
         let mut pending = HashSet::new();

@@ -36,7 +36,7 @@ pub struct JsonQuoteOptions {
 }
 
 impl JsonQuoteOptions {
-    pub fn no_unicode() -> Self {
+    pub fn no_unicode_raw() -> Self {
         Self {
             // \uXXXX not allowed
             allowed_escapes: "nrbtf\\\"".to_string(),
@@ -44,11 +44,19 @@ impl JsonQuoteOptions {
         }
     }
 
-    pub fn with_unicode() -> Self {
+    pub fn with_unicode_raw() -> Self {
         Self {
             // allow \uXXXX
             allowed_escapes: "nrbtf\\\"u".to_string(),
             raw_mode: true,
+        }
+    }
+
+    pub fn regular() -> Self {
+        Self {
+            // allow \uXXXX
+            allowed_escapes: "nrbtf\\\"u".to_string(),
+            raw_mode: false,
         }
     }
 

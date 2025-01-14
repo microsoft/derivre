@@ -1,13 +1,20 @@
-use derivre::{Regex, RegexAst, RegexBuilder};
+use std::u64;
+
+use anyhow::Result;
+use derivre::{JsonQuoteOptions, Regex, RegexAst, RegexBuilder};
 
 const REL_FUEL: u64 = 1_000_000;
 
-fn mk_and(a: &str, b: &str) -> Regex {
+fn mk_and(a: &str, b: &str, json: bool, fuel: u64) -> Result<Regex> {
     let mut bld = RegexBuilder::new();
     let a = RegexAst::ExprRef(bld.mk_regex(a).unwrap());
     let b = RegexAst::ExprRef(bld.mk_regex(b).unwrap());
-    let r = bld.mk(&RegexAst::And(vec![a, b])).unwrap();
-    bld.to_regex(r)
+    let mut ast = RegexAst::And(vec![a, b]);
+    if json {
+        ast = RegexAst::JsonQuote(Box::new(ast), JsonQuoteOptions::regular())
+    }
+    let r = bld.mk(&ast).unwrap();
+    bld.to_regex_limited(r, fuel)
 }
 
 fn is_contained_in(small: &str, big: &str) -> bool {
@@ -37,7 +44,11 @@ fn is_contained_in_prefixes_except(small: &str, big: &str, except: &str) -> bool
 }
 
 fn check_empty(a: &str, b: &str) {
-    let mut r = mk_and(a, b);
+    check_empty_limited(a, b, false, u64::MAX)
+}
+
+fn check_empty_limited(a: &str, b: &str, json: bool, fuel: u64) {
+    let mut r = mk_and(a, b, json, fuel).unwrap();
     assert!(r.always_empty());
 
     let mut r = Regex::new(a).unwrap();
@@ -47,9 +58,28 @@ fn check_empty(a: &str, b: &str) {
     assert!(!r.always_empty());
 }
 
-fn check_non_empty(a: &str, b: &str) {
-    let mut r = mk_and(a, b);
+fn check_empty_or_failing_limited(a: &str, b: &str, json: bool, fuel: u64) {
+    println!("EMPTY-OR-FAILING {} and {}", a, b);
+    let r = mk_and(a, b, json, fuel);
+    if let Ok(mut r) = r {
+        assert!(r.always_empty());
+    }
+
+    let mut r = Regex::new(a).unwrap();
     assert!(!r.always_empty());
+
+    let mut r = Regex::new(b).unwrap();
+    assert!(!r.always_empty());
+}
+
+fn check_non_empty_limited(a: &str, b: &str, json: bool, fuel: u64) {
+    println!("NON-EMPTY {} and {}", a, b);
+    let mut r = mk_and(a, b, json, fuel).unwrap();
+    assert!(!r.always_empty());
+}
+
+fn check_non_empty(a: &str, b: &str) {
+    check_non_empty_limited(a, b, false, u64::MAX)
 }
 
 fn check_contains(small: &str, big: &str) {
@@ -203,6 +233,21 @@ fn test_prefixes_except() {
     check_not_contains_prefixes_except(r"[a-z]{0,4}", "[a-zB]{0,4}Q", r#"(foozQ|barQ)"#);
 
     check_contains_prefixes_except(r"[a-z]{0,5}", "[a-zB]{0,6}Q", r#"(foo|bar)M"#);
+}
+
+#[test]
+fn test_emptiness_repeats() {
+    let lim = 10_000;
+    let json = true;
+
+    check_non_empty_limited("([\\+\\w-]{5,96})", "(?s:.{5,96})", json, lim);
+    check_non_empty_limited("([\\w\\-]+)", "(?s:.{8,256})", json, lim);
+    check_non_empty_limited("([\\+\\w-]{50,})", "(?s:.{3,50})", json, lim);
+    check_non_empty_limited("(([a-z0-9])+)", "(?s:.{10000,})", json, lim);
+
+    check_empty_or_failing_limited("([abc]{5,96})", "(?s:[def]{5,96})", json, lim);
+    check_empty_or_failing_limited("([\\+\\w-]{50,})", "(?s:.{3,30})", json, lim);
+    check_empty_or_failing_limited("([\\+\\w-]{50,})", "(?s:.{3,49})", json, lim);
 }
 
 #[test]
