@@ -76,7 +76,7 @@ impl ByteCompressor {
                     scale,
                     fractional_part,
                 } => trg.mk_remainder_is(divisor, remainder, scale, fractional_part),
-                Expr::Concat(_, _) => trg.mk_concat(&mut args),
+                Expr::Concat(_, _) => trg.mk_concat(args[0], args[1]),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
             };

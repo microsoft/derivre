@@ -312,20 +312,20 @@ impl RegexBuilder {
             } else if include_nl {
                 let hex0 = exprset.mk_byte_set(&byteset_from_range(b'0', b'1'));
                 let hex1 = exprset.mk_byte_set(&hex_byteset(include_nl));
-                exprset.mk_concat(&mut vec![upref, hex0, hex1])
+                exprset.mk_concat_vec(&[upref, hex0, hex1])
             } else {
                 let n0 = exprset.mk_byte(b'0');
                 let n1 = exprset.mk_byte(b'1');
                 let hex0 = exprset.mk_byte_set(&hex_byteset(false));
-                let hex0 = exprset.mk_concat(&mut vec![n0, hex0]);
+                let hex0 = exprset.mk_concat(n0, hex0);
                 let hex1 = exprset.mk_byte_set(&hex_byteset(true));
-                let hex1 = exprset.mk_concat(&mut vec![n1, hex1]);
+                let hex1 = exprset.mk_concat(n1, hex1);
                 let hex01 = exprset.mk_or(&mut vec![hex0, hex1]);
-                exprset.mk_concat(&mut vec![upref, hex01])
+                exprset.mk_concat(upref, hex01)
             };
 
             let u_or_single = exprset.mk_or(&mut vec![u0000, single_quote]);
-            exprset.mk_concat(&mut vec![backslash, u_or_single])
+            exprset.mk_concat(backslash, u_or_single)
         }
 
         fn quote_byteset(
@@ -361,10 +361,10 @@ impl RegexBuilder {
 
                 let quoted_bs = exprset.mk_byte_set(&quoted_bs);
                 let other_bytes = exprset.mk_or(&mut other_bytes);
-                let other_bytes = exprset.mk_concat(&mut vec![upref, other_bytes]);
+                let other_bytes = exprset.mk_concat(upref, other_bytes);
 
                 let quoted_or_other = exprset.mk_or(&mut vec![quoted_bs, other_bytes]);
-                exprset.mk_concat(&mut vec![backslash, quoted_or_other])
+                exprset.mk_concat(backslash, quoted_or_other)
             };
 
             let mut bs_without_ctrl = bs;
@@ -438,7 +438,7 @@ impl RegexBuilder {
                     // otherwise, actually map the args
                     Expr::And(_, _) => exprset.mk_and(args),
                     Expr::Or(_, _) => exprset.mk_or(args),
-                    Expr::Concat(_, _) => exprset.mk_concat(args),
+                    Expr::Concat(_, _) => exprset.mk_concat(args[0], args[1]),
                     Expr::Not(_, _) => exprset.mk_not(args[0]),
                     Expr::Lookahead(_, _, _) => exprset.mk_lookahead(args[0], 0),
                     Expr::Repeat(_, _, min, max) => exprset.mk_repeat(args[0], min, max),
@@ -450,7 +450,7 @@ impl RegexBuilder {
         let r = if options.raw_mode {
             r
         } else {
-            self.exprset.mk_concat(&mut vec![quote, r, quote])
+            self.exprset.mk_concat_vec(&[quote, r, quote])
         };
         Ok(r)
     }
@@ -499,7 +499,7 @@ impl RegexBuilder {
                     }
                     RegexAst::And(_) => self.exprset.mk_and(new_args),
                     RegexAst::Or(_) => self.exprset.mk_or(new_args),
-                    RegexAst::Concat(_) => self.exprset.mk_concat(new_args),
+                    RegexAst::Concat(_) => self.exprset.mk_concat_vec(new_args),
                     RegexAst::Not(_) => self.exprset.mk_not(new_args[0]),
                     RegexAst::LookAhead(_) => self.exprset.mk_lookahead(new_args[0], 0),
                     RegexAst::EmptyString => ExprRef::EMPTY_STRING,

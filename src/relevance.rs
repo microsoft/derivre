@@ -245,23 +245,17 @@ impl RelevanceCache {
                         let tail = exprs.mk_repeat(e, min.saturating_sub(1), max);
                         let tmp = deriv[0]
                             .iter()
-                            .map(|(b, r)| (*b, exprs.mk_concat(&mut vec![*r, tail])))
+                            .map(|(b, r)| (*b, exprs.mk_concat(*r, tail)))
                             .collect();
                         simplify(exprs, tmp)
                     }
-                    Expr::Concat(_, args) => {
-                        let mut or_branches = vec![];
-                        let args = args.to_vec();
-                        for i in 0..args.len() {
-                            let nullable = exprs.is_nullable(args[i]);
-                            or_branches.extend(deriv[i].iter().map(|(b, r)| {
-                                let mut cc = vec![*r];
-                                cc.extend_from_slice(&args[i + 1..]);
-                                (*b, exprs.mk_concat(&mut cc))
-                            }));
-                            if !nullable {
-                                break;
-                            }
+                    Expr::Concat(_, [aa, bb]) => {
+                        let mut or_branches: Vec<_> = deriv[0]
+                            .iter()
+                            .map(|(b, r)| (*b, exprs.mk_concat(*r, bb)))
+                            .collect();
+                        if exprs.is_nullable(aa) {
+                            or_branches.extend_from_slice(&deriv[1]);
                         }
                         simplify(exprs, or_branches)
                     }
@@ -419,14 +413,15 @@ impl RelevanceCache {
         // println!("relevance: {}", exprs.expr_to_string(top_expr));
 
         match exprs.get(top_expr) {
-            Expr::Concat(_, args) => {
+            Expr::Concat(_, _) => {
+                let args = exprs.unfold_concat(top_expr);
                 let mut non_pos: Vec<_> = args
                     .iter()
                     .map(|e| *e)
                     .filter(|e| !exprs.is_positive(*e))
                     .collect();
                 if non_pos.len() != args.len() {
-                    let inner = exprs.mk_concat(&mut non_pos);
+                    let inner = exprs._mk_concat_vec(&mut non_pos);
                     return self.is_non_empty_inner(exprs, inner);
                 }
             }
@@ -553,10 +548,10 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
             }
             Some(mx)
         }
-        Expr::Concat(_, args) => {
+        Expr::Concat(_, _) => {
             let mut sum = 0;
-            for a in args {
-                if let Some(l) = simple_length(exprs, *a) {
+            for a in exprs.iter_concat(e) {
+                if let Some(l) = simple_length(exprs, a) {
                     sum += l;
                 } else {
                     return None;
@@ -570,8 +565,8 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
 
 fn strip_common_suffix(exprs: &ExprSet, a: ExprRef, b: ExprRef) -> (ExprRef, ExprRef) {
     match (exprs.get(a), exprs.get(b)) {
-        (Expr::Concat(_, [a0, a1]), Expr::Concat(_, [b0, b1])) if a1 == b1 => (*a0, *b0),
-        (Expr::Concat(_, arr), _) => (arr[0], b),
+        (Expr::Concat(_, [a0, a1]), Expr::Concat(_, [b0, b1])) if a1 == b1 => (a0, b0),
+        (Expr::Concat(_, [a0, _]), _) => (a0, b),
         _ => (a, b),
     }
 }

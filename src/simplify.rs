@@ -196,14 +196,7 @@ impl ExprSet {
     }
 
     fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
-        let mut concats: Vec<Vec<ExprRef>> = args
-            .iter()
-            .map(|e| {
-                let mut tmp = vec![*e];
-                self.flatten_tag(ExprTag::Concat, &mut tmp);
-                tmp
-            })
-            .collect();
+        let mut concats: Vec<Vec<ExprRef>> = args.iter().map(|e| self.unfold_concat(*e)).collect();
         concats.sort_unstable();
         let mut prev = ExprRef::INVALID;
         let mut has_double = false;
@@ -232,7 +225,7 @@ impl ExprSet {
         if depth > 100 {
             let mut v = args
                 .iter()
-                .map(|v| self.mk_concat(&mut (&v[offset..]).to_vec()))
+                .map(|v| self._mk_concat_vec(&v[offset..]))
                 .collect();
             return self.mk_or(&mut v);
         }
@@ -273,7 +266,7 @@ impl ExprSet {
 
         let mut children = first[offset..end_offset].to_vec();
         children.push(self.mk_or(&mut alternatives));
-        self.mk_concat(&mut children)
+        self._mk_concat_vec(&mut children)
     }
 
     pub fn mk_byte_set_not(&mut self, x: ExprRef) -> ExprRef {
@@ -489,32 +482,98 @@ impl ExprSet {
         }
     }
 
-    pub fn mk_concat(&mut self, args: &mut Vec<ExprRef>) -> ExprRef {
-        self.flatten_tag(ExprTag::Concat, args);
-        self.pay(args.len());
-        args.retain(|&e| e != ExprRef::EMPTY_STRING);
-        if args.len() == 0 {
-            ExprRef::EMPTY_STRING
-        } else if args.len() == 1 {
-            args[0]
-        } else {
-            let mut nullable = true;
-            let mut positive = true;
-            for e in args.iter() {
-                if *e == ExprRef::NO_MATCH {
-                    return ExprRef::NO_MATCH;
+    pub fn unfold_concat(&self, mut curr: ExprRef) -> Vec<ExprRef> {
+        let mut out = Vec::new();
+        loop {
+            match self.get(curr) {
+                Expr::Concat(_, [l, r]) => {
+                    // l is never a Concat
+                    out.push(l);
+                    curr = r;
                 }
-                let f = self.get_flags(*e);
-                if nullable && !f.is_nullable() {
-                    nullable = false;
-                }
-                if positive && !f.is_positive() {
-                    positive = false;
+                _ => {
+                    out.push(curr);
+                    break;
                 }
             }
-            let flags = ExprFlags::from_nullable_positive(nullable, positive);
-            self.mk(Expr::Concat(flags, &args))
         }
+        out
+    }
+
+    pub fn iter_concat(&self, root: ExprRef) -> ConcatIter {
+        ConcatIter {
+            exprs: self,
+            current: Some(root),
+        }
+    }
+
+    pub fn mk_concat_vec(&mut self, args: &[ExprRef]) -> ExprRef {
+        for &arg in args {
+            if arg == ExprRef::NO_MATCH {
+                return ExprRef::NO_MATCH;
+            }
+            if self.get_tag(arg) == ExprTag::Concat || arg == ExprRef::EMPTY_STRING {
+                let mut args2 = vec![];
+                for &arg in args {
+                    if arg == ExprRef::EMPTY_STRING {
+                        continue;
+                    }
+                    if arg == ExprRef::NO_MATCH {
+                        return ExprRef::NO_MATCH;
+                    }
+                    if self.get_tag(arg) == ExprTag::Concat {
+                        args2.extend_from_slice(&self.unfold_concat(arg));
+                    } else {
+                        args2.push(arg);
+                    }
+                }
+                return self._mk_concat_vec(&args2);
+            }
+        }
+
+        self._mk_concat_vec(args)
+    }
+
+    pub(crate) fn _mk_concat_vec(&mut self, args: &[ExprRef]) -> ExprRef {
+        let len = args.len();
+        if len == 0 {
+            ExprRef::EMPTY_STRING
+        } else if len == 1 {
+            args[0]
+        } else {
+            let mut r = args[len - 1];
+            for &arg in (&args[..len - 1]).iter().rev() {
+                r = self.mk_concat(arg, r);
+            }
+            r
+        }
+    }
+
+    pub fn mk_concat(&mut self, a: ExprRef, b: ExprRef) -> ExprRef {
+        self.pay(2);
+        if a == ExprRef::EMPTY_STRING {
+            return b;
+        }
+        if b == ExprRef::EMPTY_STRING {
+            return a;
+        }
+        if a == ExprRef::NO_MATCH || b == ExprRef::NO_MATCH {
+            return ExprRef::NO_MATCH;
+        }
+
+        if self.get_tag(a) == ExprTag::Concat {
+            let mut args = self.unfold_concat(a);
+            args.push(b);
+            return self._mk_concat_vec(&args);
+        }
+
+        let fa = self.get_flags(a);
+        let fb = self.get_flags(b);
+
+        let nullable = fa.is_nullable() && fb.is_nullable();
+        let positive = fa.is_positive() && fb.is_positive();
+        let flags = ExprFlags::from_nullable_positive(nullable, positive);
+        self.mk(Expr::Concat(flags, [a, b]))
     }
 
     pub fn mk_byte_literal(&mut self, s: &[u8]) -> ExprRef {
@@ -523,7 +582,7 @@ impl ExprSet {
         for b in s {
             args.push(self.mk_byte(*b));
         }
-        self.mk_concat(&mut args)
+        self._mk_concat_vec(&args)
     }
 
     pub fn mk_literal(&mut self, s: &str) -> ExprRef {
@@ -570,4 +629,27 @@ fn add_to_sorted(args: &mut Vec<ExprRef>, e: ExprRef) {
     let idx = args.binary_search(&e).unwrap_or_else(|x| x);
     assert!(idx == args.len() || args[idx] != e);
     args.insert(idx, e);
+}
+
+pub struct ConcatIter<'a> {
+    exprs: &'a ExprSet,
+    current: Option<ExprRef>,
+}
+
+impl<'a> Iterator for ConcatIter<'a> {
+    type Item = ExprRef;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.current?;
+        match self.exprs.get(curr) {
+            Expr::Concat(_, [l, r]) => {
+                self.current = Some(r);
+                Some(l)
+            }
+            _ => {
+                self.current = None;
+                Some(curr)
+            }
+        }
+    }
 }

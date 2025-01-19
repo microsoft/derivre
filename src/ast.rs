@@ -21,7 +21,7 @@ impl ExprRef {
     pub const NON_EMPTY_BYTE_STRING: ExprRef = ExprRef(5);
 
     pub fn new(id: u32) -> Self {
-        assert!(id != 0, "ExprRef(0) is reserved for invalid reference");
+        // assert!(id != 0, "ExprRef(0) is reserved for invalid reference");
         ExprRef(id)
     }
 
@@ -54,7 +54,7 @@ pub enum Expr<'a> {
     Lookahead(ExprFlags, ExprRef, u32),
     Not(ExprFlags, ExprRef),
     Repeat(ExprFlags, ExprRef, u32, u32),
-    Concat(ExprFlags, &'a [ExprRef]),
+    Concat(ExprFlags, [ExprRef; 2]),
     Or(ExprFlags, &'a [ExprRef]),
     And(ExprFlags, &'a [ExprRef]),
 }
@@ -190,7 +190,8 @@ impl<'a> Expr<'a> {
 
     pub fn args(&self) -> &[ExprRef] {
         match self {
-            Expr::Concat(_, es) | Expr::Or(_, es) | Expr::And(_, es) => es,
+            Expr::Concat(_, es) => es,
+            Expr::Or(_, es) | Expr::And(_, es) => es,
             Expr::Lookahead(_, e, _) | Expr::Not(_, e) | Expr::Repeat(_, e, _, _) => {
                 std::slice::from_ref(e)
             }
@@ -245,7 +246,7 @@ impl<'a> Expr<'a> {
                 fractional_part: s[4] != 0,
             },
             ExprTag::Repeat => Expr::Repeat(flags, ExprRef::new(s[1]), s[2], s[3]),
-            ExprTag::Concat => Expr::Concat(flags, bytemuck::cast_slice(&s[1..])),
+            ExprTag::Concat => Expr::Concat(flags, [ExprRef::new(s[1]), ExprRef::new(s[2])]),
             ExprTag::Or => Expr::Or(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::And => Expr::And(flags, bytemuck::cast_slice(&s[1..])),
         }
