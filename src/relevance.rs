@@ -5,6 +5,7 @@ use crate::{
     ast::{Expr, ExprRef, ExprSet},
     nextbyte::next_byte_simple,
     raw::DerivCache,
+    simplify::{ConcatElement, OwnedConcatElement},
     NextByte,
 };
 
@@ -149,6 +150,12 @@ impl RelevanceCache {
                     Expr::NoMatch => vec![],
                     Expr::Byte(_) => vec![(e, ExprRef::EMPTY_STRING)],
                     Expr::ByteSet(_) => vec![(e, ExprRef::EMPTY_STRING)],
+                    Expr::ByteConcat(_, bytes, tail) => {
+                        let bb = bytes[1..].to_vec();
+                        let sel = exprs.mk_byte(bytes[0]);
+                        let d = exprs.mk_byte_concat(&bb, tail);
+                        vec![(sel, d)]
+                    }
 
                     // just unwrap lookaheads
                     Expr::Lookahead(_, _, _) => deriv.pop().unwrap(),
@@ -326,10 +333,9 @@ impl RelevanceCache {
             (Expr::Repeat(_, small_ch, _, small_high), Expr::Repeat(_, main_ch, _, main_high))
                 if small_high <= main_high && 2 <= main_high =>
             {
-                if !or_branches(exprs, &[except])
-                    .iter()
-                    .all(|c| simple_length(exprs, *c).unwrap_or(usize::MAX) < main_high as usize)
-                {
+                if !or_branches(exprs, &[except]).iter().all(|c| {
+                    simple_max_length(exprs, *c).unwrap_or(usize::MAX) < main_high as usize
+                }) {
                     debug!(" -> len, nonempty");
                     return Ok(false);
                 }
@@ -413,15 +419,26 @@ impl RelevanceCache {
         // println!("relevance: {}", exprs.expr_to_string(top_expr));
 
         match exprs.get(top_expr) {
-            Expr::Concat(_, _) => {
-                let args = exprs.unfold_concat(top_expr);
-                let mut non_pos: Vec<_> = args
-                    .iter()
-                    .map(|e| *e)
-                    .filter(|e| !exprs.is_positive(*e))
-                    .collect();
-                if non_pos.len() != args.len() {
-                    let inner = exprs._mk_concat_vec(&mut non_pos);
+            Expr::Concat(_, _) | Expr::ByteConcat(_, _, _) => {
+                let mut tmp = vec![];
+                let mut num_filter = 0;
+                for a in exprs.iter_concat(top_expr) {
+                    match a {
+                        ConcatElement::Expr(e) => {
+                            if exprs.is_positive(e) {
+                                num_filter += 1;
+                            } else {
+                                tmp.push(OwnedConcatElement::Expr(e));
+                            }
+                        }
+                        ConcatElement::Bytes(_) => {
+                            num_filter += 1;
+                        }
+                    }
+                }
+
+                if num_filter > 0 {
+                    let inner = exprs._mk_concat_vec(tmp);
                     return self.is_non_empty_inner(exprs, inner);
                 }
             }
@@ -533,14 +550,14 @@ fn or_branches<'a>(exprs: &'a ExprSet, e: &'a [ExprRef]) -> &'a [ExprRef] {
     }
 }
 
-fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
+fn simple_max_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
     match exprs.get(e) {
         Expr::ByteSet(_) | Expr::Byte(_) => Some(1),
         Expr::EmptyString => Some(0),
         Expr::Or(_, args) => {
             let mut mx = 0;
             for a in args {
-                if let Some(l) = simple_length(exprs, *a) {
+                if let Some(l) = simple_max_length(exprs, *a) {
                     mx = mx.max(l);
                 } else {
                     return None;
@@ -548,13 +565,18 @@ fn simple_length(exprs: &ExprSet, e: ExprRef) -> Option<usize> {
             }
             Some(mx)
         }
-        Expr::Concat(_, _) => {
+        Expr::Concat(_, _) | Expr::ByteConcat(_, _, _) => {
             let mut sum = 0;
             for a in exprs.iter_concat(e) {
-                if let Some(l) = simple_length(exprs, a) {
-                    sum += l;
-                } else {
-                    return None;
+                match a {
+                    ConcatElement::Bytes(b) => sum += b.len(),
+                    ConcatElement::Expr(a) => {
+                        if let Some(l) = simple_max_length(exprs, a) {
+                            sum += l;
+                        } else {
+                            return None;
+                        }
+                    }
                 }
             }
             Some(sum)

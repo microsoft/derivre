@@ -4,6 +4,7 @@ use hashbrown::HashMap;
 
 use crate::{
     ast::{byteset_256, byteset_contains, byteset_set, Expr, ExprSet},
+    simplify::ConcatElement,
     ExprRef,
 };
 
@@ -98,13 +99,12 @@ impl PrettyPrinter {
     fn write_concat(
         &self,
         exprset: &ExprSet,
-        ids: &[ExprRef],
+        concat_expr: ExprRef,
         f: &mut String,
         max_len: usize,
     ) -> std::fmt::Result {
         write!(f, "(")?;
-        let mut i = 0;
-        while i < ids.len() {
+        for (i, elt) in exprset.iter_concat(concat_expr).enumerate() {
             if f.len() > max_len {
                 write!(f, "…")?;
                 break;
@@ -114,39 +114,29 @@ impl PrettyPrinter {
                 write!(f, " ")?;
             }
 
-            let mut bytes = vec![];
-            while i + bytes.len() < ids.len() {
-                let e = exprset.get(ids[i + bytes.len()]);
-                match e {
-                    Expr::Byte(b) => bytes.push(b),
-                    _ => break,
-                }
-            }
-            let mut num_elts = 1;
-            if bytes.len() > 1 {
-                num_elts = bytes.len();
-                if let Ok(s) = String::from_utf8(bytes) {
-                    if f.len() + s.len() > max_len {
-                        write!(f, "…")?;
-                        break;
+            match elt {
+                ConcatElement::Bytes(bytes) => {
+                    if let Ok(s) = String::from_utf8(bytes.to_vec()) {
+                        if f.len() + s.len() > max_len {
+                            write!(f, "…")?;
+                            break;
+                        } else {
+                            write!(f, "{:?}", s)?;
+                        }
                     } else {
-                        write!(f, "{:?}", s)?;
+                        write!(
+                            f,
+                            "{}",
+                            bytes
+                                .iter()
+                                .map(|b| self.byte_to_string(*b))
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        )?;
                     }
-                    i += num_elts;
-                    continue;
                 }
+                ConcatElement::Expr(id) => self.write_expr(exprset, id, f, max_len)?,
             }
-            for j in 0..num_elts {
-                if f.len() > max_len {
-                    write!(f, "…")?;
-                    break;
-                }
-                if j > 0 {
-                    write!(f, " ")?;
-                }
-                self.write_expr(exprset, ids[i + j], f, max_len)?;
-            }
-            i += num_elts;
         }
         write!(f, ")")
     }
@@ -218,8 +208,8 @@ impl PrettyPrinter {
             } => {
                 write!(f, "( % {} == {} )", divisor, remainder)
             }
-            Expr::Concat(_, _) => {
-                self.write_concat(exprset, &exprset.unfold_concat(id), f, max_len)
+            Expr::ByteConcat(_, _, _) | Expr::Concat(_, _) => {
+                self.write_concat(exprset, id, f, max_len)
             }
             Expr::Or(_, es) => self.write_exprs(exprset, " | ", es, f, max_len),
             Expr::And(_, es) => self.write_exprs(exprset, " & ", es, f, max_len),

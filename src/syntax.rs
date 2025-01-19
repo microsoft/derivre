@@ -157,10 +157,7 @@ impl ExprSet {
 
             let r = match node.ast.kind() {
                 HirKind::Empty => ExprRef::EMPTY_STRING,
-                HirKind::Literal(bytes) => {
-                    let byte_args: Vec<_> = bytes.0.iter().map(|b| self.mk_byte(*b)).collect();
-                    self._mk_concat_vec(&byte_args)
-                }
+                HirKind::Literal(bytes) => self.mk_byte_literal(&bytes.0),
                 HirKind::Class(hir::Class::Bytes(ranges)) => {
                     let mut bs = byteset_256();
                     for r in ranges.ranges() {

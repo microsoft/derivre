@@ -195,20 +195,15 @@ impl ExprSet {
         }
     }
 
-    fn unwrap_concat(&self, e: ExprRef) -> (ExprRef, ExprRef) {
-        match self.get(e) {
-            Expr::Concat(_, [l, r]) => (l, r),
-            _ => (e, ExprRef::EMPTY_STRING),
-        }
-    }
-
     fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
         let args0 = args.clone();
-        args.sort_unstable_by(|&a, &b| self.iter_concat(a).cmp(self.iter_concat(b)));
-        let mut prev = ExprRef::INVALID;
+
+        args.sort_unstable_by(|&a, &b| self.iter_concat_bytes(a).cmp(self.iter_concat_bytes(b)));
+
+        let mut prev = None;
         let mut has_double = false;
         for c in args.iter() {
-            let c0 = self.unwrap_concat(*c).0;
+            let c0 = self.iter_concat_bytes(*c).next();
             if c0 == prev {
                 has_double = true;
                 break;
@@ -219,6 +214,10 @@ impl ExprSet {
             self.mk(Expr::Or(flags, &args0))
         } else {
             self.optimize = false;
+            let mut args = args
+                .iter()
+                .map(|a| ConcatBytePointer::new(*a))
+                .collect::<Vec<_>>();
             let r = self.trie_rec(args.as_mut_slice(), 0);
             self.optimize = true;
             r
@@ -228,32 +227,38 @@ impl ExprSet {
     // The idea is to optimize regexps like identifier1|identifier2|...|identifier50000
     // into a "trie" with shared prefixes;
     // for example: (foo|far|bar|baz) => (ba[rz]|f(oo|ar))
-    fn trie_rec(&mut self, args: &mut [ExprRef], depth: usize) -> ExprRef {
+    fn trie_rec(&mut self, args: &mut [ConcatBytePointer], depth: usize) -> ExprRef {
         if args.len() == 1 {
-            return args[0];
+            return args[0].snapshot(self);
         }
 
         // limit recursion depth
         if depth > 100 {
-            return self.mk_or(&mut args.to_vec());
+            let mut args = args.iter().map(|a| a.snapshot(self)).collect::<Vec<_>>();
+            return self.mk_or(&mut args);
         }
 
         let mut common = vec![];
         let last_idx = args.len() - 1;
         loop {
-            let (a, aa) = self.unwrap_concat(args[0]);
-            let (b, bb) = self.unwrap_concat(args[last_idx]);
+            let a_0 = args[0].clone();
+            let a_end = args[last_idx].clone();
+            let a = args[0].next(self);
+            let b = args[last_idx].next(self);
             if a != b {
+                args[0] = a_0;
+                args[last_idx] = a_end;
                 break;
             }
-            common.push(a);
-            assert!(a != ExprRef::EMPTY_STRING);
-            args[0] = aa;
-            args[last_idx] = bb;
+            let a = a.unwrap();
+            let b = b.unwrap();
+
+            a.push_owned_to(&mut common);
+
+            // assert!(a != ExprRef::EMPTY_STRING);
             for idx in 1..last_idx {
-                let (a, aa) = self.unwrap_concat(args[idx]);
+                let a = args[idx].next(self).unwrap();
                 assert!(a == b);
-                args[idx] = aa;
             }
         }
         assert!(depth == 0 || common.len() > 0);
@@ -262,13 +267,13 @@ impl ExprSet {
 
         let mut alternatives = vec![];
         while idx < args.len() {
-            let (cur, _) = self.unwrap_concat(args[idx]);
+            let cur = args[idx].peek(self);
             let mut next = idx + 1;
-            while next < args.len() && self.unwrap_concat(args[next]).0 == cur {
+            while next < args.len() && args[next].peek(self) == cur {
                 next += 1;
             }
 
-            if cur != ExprRef::EMPTY_STRING {
+            if cur.is_some() {
                 alternatives.push(self.trie_rec(&mut args[idx..next], depth + 1));
             } else {
                 alternatives.push(ExprRef::EMPTY_STRING);
@@ -278,15 +283,8 @@ impl ExprSet {
         }
 
         let alts = self.mk_or(&mut alternatives);
-
-        if common.len() == 0 {
-            alts
-        } else if common.len() == 1 {
-            self.mk_concat(common[0], alts)
-        } else {
-            common.push(alts);
-            self.mk_concat_vec(&common)
-        }
+        common.push(OwnedConcatElement::Expr(alts));
+        self._mk_concat_vec(common)
     }
 
     pub fn mk_byte_set_not(&mut self, x: ExprRef) -> ExprRef {
@@ -502,24 +500,6 @@ impl ExprSet {
         }
     }
 
-    pub fn unfold_concat(&self, mut curr: ExprRef) -> Vec<ExprRef> {
-        let mut out = Vec::new();
-        loop {
-            match self.get(curr) {
-                Expr::Concat(_, [l, r]) => {
-                    // l is never a Concat
-                    out.push(l);
-                    curr = r;
-                }
-                _ => {
-                    out.push(curr);
-                    break;
-                }
-            }
-        }
-        out
-    }
-
     pub fn iter_concat(&self, root: ExprRef) -> ConcatIter {
         ConcatIter {
             exprs: self,
@@ -527,44 +507,62 @@ impl ExprSet {
         }
     }
 
+    pub fn iter_concat_bytes(&self, root: ExprRef) -> ConcatByteIter {
+        ConcatByteIter {
+            exprs: self,
+            pointer: ConcatBytePointer::new(root),
+        }
+    }
+
+    fn is_concat(&self, e: ExprRef) -> bool {
+        let tag = self.get_tag(e);
+        tag == ExprTag::Concat || tag == ExprTag::ByteConcat
+    }
+
     pub fn mk_concat_vec(&mut self, args: &[ExprRef]) -> ExprRef {
-        for &arg in args {
-            if arg == ExprRef::NO_MATCH {
-                return ExprRef::NO_MATCH;
-            }
-            if self.get_tag(arg) == ExprTag::Concat || arg == ExprRef::EMPTY_STRING {
-                let mut args2 = vec![];
-                for &arg in args {
-                    if arg == ExprRef::EMPTY_STRING {
-                        continue;
-                    }
-                    if arg == ExprRef::NO_MATCH {
+        let mut expanded_args = Vec::with_capacity(args.len());
+        for idx in 0..args.len() {
+            let arg = args[idx];
+            if idx == args.len() - 1 {
+                if arg == ExprRef::NO_MATCH {
+                    return ExprRef::NO_MATCH;
+                } else if arg != ExprRef::EMPTY_STRING {
+                    expanded_args.push(OwnedConcatElement::Expr(arg));
+                }
+            } else {
+                // flatten everything except for the last element
+                for a in self.iter_concat(arg) {
+                    if !a.push_owned_to(&mut expanded_args) {
                         return ExprRef::NO_MATCH;
                     }
-                    if self.get_tag(arg) == ExprTag::Concat {
-                        args2.extend_from_slice(&self.unfold_concat(arg));
-                    } else {
-                        args2.push(arg);
-                    }
                 }
-                return self._mk_concat_vec(&args2);
             }
         }
 
-        self._mk_concat_vec(args)
+        self._mk_concat_vec(expanded_args)
     }
 
-    pub(crate) fn _mk_concat_vec(&mut self, args: &[ExprRef]) -> ExprRef {
+    pub(crate) fn _mk_concat_vec(&mut self, args: Vec<OwnedConcatElement>) -> ExprRef {
         let len = args.len();
         if len == 0 {
             ExprRef::EMPTY_STRING
-        } else if len == 1 {
-            args[0]
         } else {
-            let mut r = args[len - 1];
-            for &arg in (&args[..len - 1]).iter().rev() {
-                r = self.mk_concat(arg, r);
+            let mut r = match &args[len - 1] {
+                OwnedConcatElement::Expr(e) => *e,
+                OwnedConcatElement::Bytes(b) => self.mk_byte_literal(b),
+            };
+
+            for arg in (&args[..len - 1]).iter().rev() {
+                match arg {
+                    OwnedConcatElement::Expr(e) => {
+                        r = self.mk_concat(*e, r);
+                    }
+                    OwnedConcatElement::Bytes(b) => {
+                        r = self.mk_byte_concat(&b, r);
+                    }
+                }
             }
+
             r
         }
     }
@@ -581,10 +579,15 @@ impl ExprSet {
             return ExprRef::NO_MATCH;
         }
 
-        if self.get_tag(a) == ExprTag::Concat {
-            let mut args = self.unfold_concat(a);
-            args.push(b);
-            return self._mk_concat_vec(&args);
+        if self.is_concat(a) {
+            let mut expanded_args = vec![];
+            for e in self.iter_concat(a) {
+                if !e.push_owned_to(&mut expanded_args) {
+                    return ExprRef::NO_MATCH;
+                }
+            }
+            expanded_args.push(OwnedConcatElement::Expr(b));
+            return self._mk_concat_vec(expanded_args);
         }
 
         let fa = self.get_flags(a);
@@ -596,13 +599,28 @@ impl ExprSet {
         self.mk(Expr::Concat(flags, [a, b]))
     }
 
-    pub fn mk_byte_literal(&mut self, s: &[u8]) -> ExprRef {
-        self.pay(s.len());
-        let mut args = vec![];
-        for b in s {
-            args.push(self.mk_byte(*b));
+    pub fn mk_byte_concat(&mut self, mut s: &[u8], mut tail: ExprRef) -> ExprRef {
+        if s.len() == 0 {
+            return tail;
         }
-        self._mk_concat_vec(&args)
+        if s.len() == 1 && tail == ExprRef::EMPTY_STRING {
+            return self.mk_byte(s[0]);
+        }
+        self.pay(2 + s.len() / ExprRef::MAX_BYTE_CONCAT);
+        let flags = ExprFlags::from_nullable_positive(false, self.is_positive(tail));
+        loop {
+            if s.len() <= ExprRef::MAX_BYTE_CONCAT {
+                return self.mk(Expr::ByteConcat(flags, s, tail));
+            } else {
+                let idx = s.len() - ExprRef::MAX_BYTE_CONCAT;
+                tail = self.mk(Expr::ByteConcat(flags, &s[idx..], tail));
+                s = &s[..idx];
+            }
+        }
+    }
+
+    pub fn mk_byte_literal(&mut self, s: &[u8]) -> ExprRef {
+        self.mk_byte_concat(s, ExprRef::EMPTY_STRING)
     }
 
     pub fn mk_literal(&mut self, s: &str) -> ExprRef {
@@ -651,24 +669,165 @@ fn add_to_sorted(args: &mut Vec<ExprRef>, e: ExprRef) {
     args.insert(idx, e);
 }
 
+pub enum ConcatElement<'a> {
+    Expr(ExprRef),
+    Bytes(&'a [u8]),
+}
+
+impl<'a> ConcatElement<'a> {
+    pub fn push_owned_to(&self, out: &mut Vec<OwnedConcatElement>) -> bool {
+        match self {
+            ConcatElement::Bytes(bb) => match out.last_mut() {
+                Some(OwnedConcatElement::Bytes(ref mut exp)) => {
+                    exp.extend_from_slice(&bb);
+                }
+                _ => {
+                    out.push(OwnedConcatElement::Bytes(bb.to_vec()));
+                }
+            },
+            ConcatElement::Expr(e) => {
+                if *e == ExprRef::NO_MATCH {
+                    return false;
+                }
+                if *e != ExprRef::EMPTY_STRING {
+                    out.push(OwnedConcatElement::Expr(*e));
+                }
+            }
+        }
+        true
+    }
+}
+
+pub enum OwnedConcatElement {
+    Expr(ExprRef),
+    Bytes(Vec<u8>),
+}
+
+#[derive(PartialEq, Eq, Debug, PartialOrd, Ord)]
+pub enum ByteConcatElement {
+    Byte(u8),
+    Expr(ExprRef),
+}
+
+impl ByteConcatElement {
+    pub fn push_owned_to(&self, out: &mut Vec<OwnedConcatElement>) {
+        match self {
+            ByteConcatElement::Byte(b) => match out.last_mut() {
+                Some(OwnedConcatElement::Bytes(ref mut exp)) => {
+                    exp.push(*b);
+                }
+                _ => {
+                    out.push(OwnedConcatElement::Bytes(vec![*b]));
+                }
+            },
+            ByteConcatElement::Expr(e) => {
+                if *e == ExprRef::NO_MATCH {
+                    panic!();
+                }
+                if *e != ExprRef::EMPTY_STRING {
+                    out.push(OwnedConcatElement::Expr(*e));
+                }
+            }
+        }
+    }
+}
+
 pub struct ConcatIter<'a> {
     exprs: &'a ExprSet,
     current: Option<ExprRef>,
 }
 
+pub struct ConcatByteIter<'a> {
+    exprs: &'a ExprSet,
+    pointer: ConcatBytePointer,
+}
+
+impl<'a> Iterator for ConcatByteIter<'a> {
+    type Item = ByteConcatElement;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pointer.next(self.exprs)
+    }
+}
+
+#[derive(Clone)]
+struct ConcatBytePointer {
+    pending: Vec<u8>,
+    current: Option<ExprRef>,
+}
+
+impl ConcatBytePointer {
+    pub fn new(curr: ExprRef) -> Self {
+        ConcatBytePointer {
+            pending: Vec::new(),
+            current: Some(curr),
+        }
+    }
+
+    pub fn peek(&self, exprset: &ExprSet) -> Option<ByteConcatElement> {
+        let mut copy = self.clone();
+        copy.next(exprset)
+    }
+
+    pub fn next(&mut self, exprset: &ExprSet) -> Option<ByteConcatElement> {
+        if self.pending.len() > 0 {
+            return Some(ByteConcatElement::Byte(self.pending.pop().unwrap()));
+        }
+
+        let curr = self.current?;
+
+        let mut it = exprset.iter_concat(curr);
+        let tmp = it.next();
+        self.current = it.current;
+        match tmp {
+            Some(ConcatElement::Bytes(bytes)) => {
+                self.pending = bytes.to_vec();
+                self.pending.reverse();
+                Some(ByteConcatElement::Byte(self.pending.pop().unwrap()))
+            }
+            Some(ConcatElement::Expr(expr)) => Some(ByteConcatElement::Expr(expr)),
+            None => None,
+        }
+    }
+
+    pub fn snapshot(&self, exprset: &mut ExprSet) -> ExprRef {
+        let tail = self.current.unwrap_or(ExprRef::EMPTY_STRING);
+        if self.pending.len() == 0 {
+            tail
+        } else {
+            let mut bytes = self.pending.clone();
+            bytes.reverse();
+            exprset.mk_byte_concat(&bytes, tail)
+        }
+    }
+}
+
 impl<'a> Iterator for ConcatIter<'a> {
-    type Item = ExprRef;
+    type Item = ConcatElement<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let curr = self.current?;
-        match self.exprs.get(curr) {
+        let expr = self.exprs.get(curr);
+        match expr {
             Expr::Concat(_, [l, r]) => {
                 self.current = Some(r);
-                Some(l)
+                if let Some(bytes) = self.exprs.get_bytes(l) {
+                    Some(ConcatElement::Bytes(bytes))
+                } else {
+                    Some(ConcatElement::Expr(l))
+                }
+            }
+            Expr::ByteConcat(_, bytes, tail) => {
+                self.current = Some(tail);
+                Some(ConcatElement::Bytes(bytes))
             }
             _ => {
                 self.current = None;
-                Some(curr)
+                if let Some(bytes) = self.exprs.get_bytes(curr) {
+                    Some(ConcatElement::Bytes(bytes))
+                } else {
+                    Some(ConcatElement::Expr(curr))
+                }
             }
         }
     }

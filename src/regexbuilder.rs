@@ -11,6 +11,7 @@ use crate::{
     },
     mapper::map_ast,
     pp::{byte_to_string, byteset_to_string},
+    simplify::ConcatElement,
     ExprRef, Regex,
 };
 
@@ -402,6 +403,13 @@ impl RegexBuilder {
             );
         }
 
+        fn byte_needs_quote(b: u8) -> bool {
+            match b {
+                b'\\' | b'"' | 0x7F | 0..0x20 => true,
+                _ => false,
+            }
+        }
+
         let r = self.exprset.map(
             e,
             &mut self.json_quote_cache,
@@ -424,11 +432,42 @@ impl RegexBuilder {
                         }
                     }
                     Expr::Byte(b) => {
-                        if b < 0x20 || b"\"\\\x7F".contains(&b) {
+                        if byte_needs_quote(b) {
                             quote_byteset(exprset, byteset_from_range(b, b), &options)
                         } else {
                             // no need to quote
                             e
+                        }
+                    }
+                    Expr::ByteConcat(_, bytes, args0) => {
+                        if bytes.iter().any(|b| byte_needs_quote(*b)) {
+                            let mut acc = vec![];
+                            let mut idx = 0;
+                            let bytes = bytes.to_vec();
+                            while idx < bytes.len() {
+                                let idx0 = idx;
+                                while idx < bytes.len() && !byte_needs_quote(bytes[idx]) {
+                                    idx += 1;
+                                }
+                                let slice = &bytes[idx0..idx];
+                                if slice.len() > 0 {
+                                    ConcatElement::Bytes(slice).push_owned_to(&mut acc);
+                                }
+                                if idx < bytes.len() {
+                                    let b = bytes[idx];
+                                    let q =
+                                        quote_byteset(exprset, byteset_from_range(b, b), &options);
+                                    ConcatElement::Expr(q).push_owned_to(&mut acc);
+                                    idx += 1;
+                                }
+                            }
+                            exprset._mk_concat_vec(acc)
+                        } else {
+                            if args[0] == args0 {
+                                e
+                            } else {
+                                exprset.mk_byte_concat(&bytes.to_vec(), args[0])
+                            }
                         }
                     }
                     // always identity

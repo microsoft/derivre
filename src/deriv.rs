@@ -68,6 +68,13 @@ impl DerivCache {
                             ExprRef::NO_MATCH
                         }
                     }
+                    Expr::ByteConcat(_, bytes, tail) => {
+                        if bytes[0] == b {
+                            exprs.mk_byte_concat(&bytes[1..].to_vec(), tail)
+                        } else {
+                            ExprRef::NO_MATCH
+                        }
+                    }
                     Expr::RemainderIs {
                         divisor,
                         remainder,

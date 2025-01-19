@@ -76,6 +76,13 @@ impl ByteCompressor {
                     scale,
                     fractional_part,
                 } => trg.mk_remainder_is(divisor, remainder, scale, fractional_part),
+                Expr::ByteConcat(_, bytes, _) => trg.mk_byte_concat(
+                    &bytes
+                        .iter()
+                        .map(|b| self.mapping[*b as usize])
+                        .collect::<Vec<_>>(),
+                    args[0],
+                ),
                 Expr::Concat(_, _) => trg.mk_concat(args[0], args[1]),
                 Expr::Or(_, _) => trg.mk_or(&mut args),
                 Expr::And(_, _) => trg.mk_and(&mut args),
@@ -106,6 +113,11 @@ impl ByteCompressor {
             todo.extend_from_slice(exprset.get_args(e));
             match exprset.get(e) {
                 Expr::Byte(b) => self.add_single_byte(b),
+                Expr::ByteConcat(_, bytes, _) => {
+                    for b in bytes {
+                        self.add_single_byte(*b);
+                    }
+                }
                 Expr::ByteSet(bs) => self.bytesets.push(bs.to_vec()),
                 Expr::RemainderIs { scale, .. } => {
                     for b in exprset.digits {

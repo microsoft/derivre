@@ -3,7 +3,7 @@ use std::{
     ops::{BitAnd, BitOr, RangeInclusive},
 };
 
-use crate::{hashcons::VecHashCons, pp::PrettyPrinter};
+use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement};
 use bytemuck_derive::{Pod, Zeroable};
 use hashbrown::HashMap;
 
@@ -19,6 +19,8 @@ impl ExprRef {
     pub const ANY_BYTE: ExprRef = ExprRef(3);
     pub const ANY_BYTE_STRING: ExprRef = ExprRef(4);
     pub const NON_EMPTY_BYTE_STRING: ExprRef = ExprRef(5);
+
+    pub const MAX_BYTE_CONCAT: usize = 20 - 1;
 
     pub fn new(id: u32) -> Self {
         // assert!(id != 0, "ExprRef(0) is reserved for invalid reference");
@@ -57,6 +59,8 @@ pub enum Expr<'a> {
     Concat(ExprFlags, [ExprRef; 2]),
     Or(ExprFlags, &'a [ExprRef]),
     And(ExprFlags, &'a [ExprRef]),
+    // This is equivalent to Concat(Byte(b0), Concat(Byte(b1), ... tail))
+    ByteConcat(ExprFlags, &'a [u8], ExprRef),
 }
 
 #[derive(Clone, Copy)]
@@ -102,6 +106,7 @@ pub enum ExprTag {
     NoMatch,
     Byte,
     ByteSet,
+    ByteConcat,
     RemainderIs,
     Lookahead,
     Not,
@@ -174,6 +179,7 @@ impl<'a> Expr<'a> {
             Expr::NoMatch => true,
             Expr::Byte(b2) => b != *b2,
             Expr::ByteSet(s) => !byteset_contains(s, b as usize),
+            Expr::ByteConcat(_, bs, _) => bs[0] != b,
             _ => false,
         }
     }
@@ -184,6 +190,7 @@ impl<'a> Expr<'a> {
             Expr::NoMatch => false,
             Expr::Byte(b2) => b == *b2,
             Expr::ByteSet(s) => byteset_contains(s, b as usize),
+            Expr::ByteConcat(_, bs, _) => bs[0] == b,
             _ => panic!("not a simple expression"),
         }
     }
@@ -192,9 +199,10 @@ impl<'a> Expr<'a> {
         match self {
             Expr::Concat(_, es) => es,
             Expr::Or(_, es) | Expr::And(_, es) => es,
-            Expr::Lookahead(_, e, _) | Expr::Not(_, e) | Expr::Repeat(_, e, _, _) => {
-                std::slice::from_ref(e)
-            }
+            Expr::Lookahead(_, e, _)
+            | Expr::Not(_, e)
+            | Expr::Repeat(_, e, _, _)
+            | Expr::ByteConcat(_, _, e) => std::slice::from_ref(e),
             Expr::RemainderIs { .. }
             | Expr::EmptyString
             | Expr::NoMatch
@@ -216,12 +224,13 @@ impl<'a> Expr<'a> {
             }
             Expr::NoMatch => ExprFlags::ZERO,
             Expr::Byte(_) | Expr::ByteSet(_) => ExprFlags::POSITIVE,
-            Expr::Lookahead(f, _, _) => *f,
-            Expr::Not(f, _) => *f,
-            Expr::Repeat(f, _, _, _) => *f,
-            Expr::Concat(f, _) => *f,
-            Expr::Or(f, _) => *f,
-            Expr::And(f, _) => *f,
+            Expr::Lookahead(f, _, _)
+            | Expr::Not(f, _)
+            | Expr::Repeat(f, _, _, _)
+            | Expr::Concat(f, _)
+            | Expr::Or(f, _)
+            | Expr::And(f, _)
+            | Expr::ByteConcat(f, _, _) => *f,
         }
     }
 
@@ -249,6 +258,11 @@ impl<'a> Expr<'a> {
             ExprTag::Concat => Expr::Concat(flags, [ExprRef::new(s[1]), ExprRef::new(s[2])]),
             ExprTag::Or => Expr::Or(flags, bytemuck::cast_slice(&s[1..])),
             ExprTag::And => Expr::And(flags, bytemuck::cast_slice(&s[1..])),
+            ExprTag::ByteConcat => {
+                let bytes0: &[u8] = bytemuck::cast_slice(&s[2..]);
+                let bytes = &bytes0[1..(bytes0[0] + 1) as usize];
+                Expr::ByteConcat(flags, bytes, ExprRef::new(s[1]))
+            }
         }
     }
 
@@ -295,6 +309,17 @@ impl<'a> Expr<'a> {
             }
             Expr::Or(flags, es) => nary_serialize(trg, flags.encode(ExprTag::Or), es),
             Expr::And(flags, es) => nary_serialize(trg, flags.encode(ExprTag::And), es),
+            Expr::ByteConcat(flags, bytes, tail) => {
+                assert!(bytes.len() <= ExprRef::MAX_BYTE_CONCAT);
+                let mut buf32 = [0u32; 2 + ((ExprRef::MAX_BYTE_CONCAT + 1) + 3) / 4];
+                buf32[0] = flags.encode(ExprTag::ByteConcat);
+                buf32[1] = tail.0;
+                let buf = bytemuck::cast_slice_mut(&mut buf32[2..]);
+                buf[0] = bytes.len() as u8;
+                buf[1..(1 + bytes.len())].copy_from_slice(bytes);
+                let final_len = 3 + bytes.len() / 4;
+                trg.push_slice(&buf32[..final_len]);
+            }
         }
     }
 }
@@ -361,26 +386,15 @@ impl ExprSet {
         if bytes.is_empty() {
             return true;
         }
-        match self.get(e) {
-            Expr::Byte(b) => bytes.len() == 1 && bytes[0] == b,
-            Expr::Concat(_, _) => {
-                let mut idx = 0;
-                for e in self.iter_concat(e) {
-                    match self.get(e) {
-                        Expr::Byte(b2) => {
-                            if bytes[idx] != b2 {
-                                return false;
-                            }
-                        }
-                        _ => return false,
-                    }
-                    idx += 1;
-                    if idx >= bytes.len() {
-                        return true;
-                    }
-                }
-                return false;
+        let mut tmp = vec![];
+        for a in self.iter_concat(e) {
+            a.push_owned_to(&mut tmp);
+            if tmp.len() > 1 {
+                break;
             }
+        }
+        match tmp.first() {
+            Some(OwnedConcatElement::Bytes(b)) => b.starts_with(bytes),
             _ => false,
         }
     }
@@ -443,6 +457,18 @@ impl ExprSet {
         Expr::from_slice(self.exprs.get(id.0))
     }
 
+    pub(crate) fn get_bytes(&self, id: ExprRef) -> Option<&[u8]> {
+        let slice = self.exprs.get(id.0);
+        match Expr::from_slice(slice) {
+            Expr::Byte(_) => {
+                let bslice: &[u8] = bytemuck::cast_slice(&slice[1..2]);
+                Some(&bslice[0..1])
+            }
+            Expr::ByteConcat(_, bytes, _) => Some(bytes),
+            _ => None,
+        }
+    }
+
     pub fn is_valid(&self, id: ExprRef) -> bool {
         id.is_valid() && self.exprs.is_valid(id.0)
     }
@@ -498,7 +524,9 @@ impl ExprSet {
         let tag = ExprTag::from_u8((s[0] & 0xff) as u8);
         match tag {
             ExprTag::Concat | ExprTag::Or | ExprTag::And => bytemuck::cast_slice(&s[1..]),
-            ExprTag::Not | ExprTag::Repeat | ExprTag::Lookahead => bytemuck::cast_slice(&s[1..2]),
+            ExprTag::Not | ExprTag::Repeat | ExprTag::Lookahead | ExprTag::ByteConcat => {
+                bytemuck::cast_slice(&s[1..2])
+            }
             ExprTag::RemainderIs
             | ExprTag::EmptyString
             | ExprTag::NoMatch
@@ -551,19 +579,22 @@ impl ExprSet {
             }
             let e = self.get(r);
             let is_concat = concat_nullable_check && matches!(e, Expr::Concat(_, _));
+            let is_byte_concat = concat_nullable_check && matches!(e, Expr::ByteConcat(_, _, _));
             let todo_len = todo.len();
             let eargs = e.args();
             mapped.clear();
-            for a in eargs {
-                let a = *a;
-                let brk = is_concat && !self.is_nullable(a);
-                if let Some(v) = cache.get(&mk_key(a)) {
-                    mapped.push(v.clone());
-                } else {
-                    todo.push(a);
-                }
-                if brk {
-                    break;
+            if !is_byte_concat {
+                for a in eargs {
+                    let a = *a;
+                    let brk = is_concat && !self.is_nullable(a);
+                    if let Some(v) = cache.get(&mk_key(a)) {
+                        mapped.push(v.clone());
+                    } else {
+                        todo.push(a);
+                    }
+                    if brk {
+                        break;
+                    }
                 }
             }
 
