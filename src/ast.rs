@@ -290,7 +290,9 @@ impl<'a> Expr<'a> {
             Expr::Repeat(flags, e, a, b) => {
                 trg.push_slice(&[flags.encode(ExprTag::Repeat), e.0, *a, *b])
             }
-            Expr::Concat(flags, es) => nary_serialize(trg, flags.encode(ExprTag::Concat), es),
+            Expr::Concat(flags, [a, b]) => {
+                trg.push_slice(&[flags.encode(ExprTag::Concat), a.0, b.0])
+            }
             Expr::Or(flags, es) => nary_serialize(trg, flags.encode(ExprTag::Or), es),
             Expr::And(flags, es) => nary_serialize(trg, flags.encode(ExprTag::And), es),
         }
@@ -361,13 +363,24 @@ impl ExprSet {
         }
         match self.get(e) {
             Expr::Byte(b) => bytes.len() == 1 && bytes[0] == b,
-            Expr::Concat(_, refs) if refs.len() >= bytes.len() => refs[0..bytes.len()]
-                .iter()
-                .zip(bytes.iter())
-                .all(|(&r, &b)| match self.get(r) {
-                    Expr::Byte(b2) => b == b2,
-                    _ => false,
-                }),
+            Expr::Concat(_, _) => {
+                let mut idx = 0;
+                for e in self.iter_concat(e) {
+                    match self.get(e) {
+                        Expr::Byte(b2) => {
+                            if bytes[idx] != b2 {
+                                return false;
+                            }
+                        }
+                        _ => return false,
+                    }
+                    idx += 1;
+                    if idx >= bytes.len() {
+                        return true;
+                    }
+                }
+                return false;
+            }
             _ => false,
         }
     }
