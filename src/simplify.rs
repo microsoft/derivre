@@ -195,23 +195,31 @@ impl ExprSet {
         }
     }
 
+    fn unwrap_concat(&self, e: ExprRef) -> (ExprRef, ExprRef) {
+        match self.get(e) {
+            Expr::Concat(_, [l, r]) => (l, r),
+            _ => (e, ExprRef::EMPTY_STRING),
+        }
+    }
+
     fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
-        let mut concats: Vec<Vec<ExprRef>> = args.iter().map(|e| self.unfold_concat(*e)).collect();
-        concats.sort_unstable();
+        let args0 = args.clone();
+        args.sort_unstable_by(|&a, &b| self.iter_concat(a).cmp(self.iter_concat(b)));
         let mut prev = ExprRef::INVALID;
         let mut has_double = false;
-        for c in &concats {
-            if c[0] == prev {
+        for c in args.iter() {
+            let c0 = self.unwrap_concat(*c).0;
+            if c0 == prev {
                 has_double = true;
                 break;
             }
-            prev = c[0];
+            prev = c0;
         }
         if !has_double {
-            self.mk(Expr::Or(flags, &args))
+            self.mk(Expr::Or(flags, &args0))
         } else {
             self.optimize = false;
-            let r = self.trie_rec(&concats, 0, 0);
+            let r = self.trie_rec(args.as_mut_slice(), 0);
             self.optimize = true;
             r
         }
@@ -220,43 +228,48 @@ impl ExprSet {
     // The idea is to optimize regexps like identifier1|identifier2|...|identifier50000
     // into a "trie" with shared prefixes;
     // for example: (foo|far|bar|baz) => (ba[rz]|f(oo|ar))
-    fn trie_rec(&mut self, args: &[Vec<ExprRef>], offset: usize, depth: usize) -> ExprRef {
-        // limit recursion depth
-        if depth > 100 {
-            let mut v = args
-                .iter()
-                .map(|v| self._mk_concat_vec(&v[offset..]))
-                .collect();
-            return self.mk_or(&mut v);
+    fn trie_rec(&mut self, args: &mut [ExprRef], depth: usize) -> ExprRef {
+        if args.len() == 1 {
+            return args[0];
         }
 
-        let mut end_offset = offset;
-        let first = &args[0];
-        let last = args.last().unwrap();
-        let l = std::cmp::min(first.len(), last.len());
-        while end_offset < l && first[end_offset] == last[end_offset] {
-            end_offset += 1;
+        // limit recursion depth
+        if depth > 100 {
+            return self.mk_or(&mut args.to_vec());
         }
-        // println!(
-        //     "depth: {} alen={} off={}-{}",
-        //     depth,
-        //     args.len(),
-        //     offset,
-        //     end_offset
-        // );
-        assert!(offset == 0 || end_offset > offset);
+
+        let mut common = vec![];
+        let last_idx = args.len() - 1;
+        loop {
+            let (a, aa) = self.unwrap_concat(args[0]);
+            let (b, bb) = self.unwrap_concat(args[last_idx]);
+            if a != b {
+                break;
+            }
+            common.push(a);
+            assert!(a != ExprRef::EMPTY_STRING);
+            args[0] = aa;
+            args[last_idx] = bb;
+            for idx in 1..last_idx {
+                let (a, aa) = self.unwrap_concat(args[idx]);
+                assert!(a == b);
+                args[idx] = aa;
+            }
+        }
+        assert!(depth == 0 || common.len() > 0);
+
         let mut idx = 0;
 
         let mut alternatives = vec![];
         while idx < args.len() {
-            let cur = args[idx].get(end_offset);
-            let mut next = idx;
-            while next < args.len() && args[next].get(end_offset) == cur {
+            let (cur, _) = self.unwrap_concat(args[idx]);
+            let mut next = idx + 1;
+            while next < args.len() && self.unwrap_concat(args[next]).0 == cur {
                 next += 1;
             }
 
-            if cur.is_some() {
-                alternatives.push(self.trie_rec(&args[idx..next], end_offset, depth + 1));
+            if cur != ExprRef::EMPTY_STRING {
+                alternatives.push(self.trie_rec(&mut args[idx..next], depth + 1));
             } else {
                 alternatives.push(ExprRef::EMPTY_STRING);
             }
@@ -264,9 +277,16 @@ impl ExprSet {
             idx = next;
         }
 
-        let mut children = first[offset..end_offset].to_vec();
-        children.push(self.mk_or(&mut alternatives));
-        self._mk_concat_vec(&mut children)
+        let alts = self.mk_or(&mut alternatives);
+
+        if common.len() == 0 {
+            alts
+        } else if common.len() == 1 {
+            self.mk_concat(common[0], alts)
+        } else {
+            common.push(alts);
+            self.mk_concat_vec(&common)
+        }
     }
 
     pub fn mk_byte_set_not(&mut self, x: ExprRef) -> ExprRef {
