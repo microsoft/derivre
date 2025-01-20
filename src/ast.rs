@@ -20,7 +20,7 @@ impl ExprRef {
     pub const ANY_BYTE_STRING: ExprRef = ExprRef(4);
     pub const NON_EMPTY_BYTE_STRING: ExprRef = ExprRef(5);
 
-    pub const MAX_BYTE_CONCAT: usize = 20 - 1;
+    pub const MAX_BYTE_CONCAT: usize = 32 - 1;
 
     pub fn new(id: u32) -> Self {
         // assert!(id != 0, "ExprRef(0) is reserved for invalid reference");
@@ -62,6 +62,16 @@ pub enum Expr<'a> {
     // This is equivalent to Concat(Byte(b0), Concat(Byte(b1), ... tail))
     ByteConcat(ExprFlags, &'a [u8], ExprRef),
 }
+
+// Note on ByteConcat and binary Concat:
+// Testcase here is a large JSON enum (2000 entries) with ~50 bytes per entry.
+// Commit https://github.com/microsoft/derivre/commit/38db596028758e7f56db1510003d02ae89070030
+// changed Concat from n-ary to binary. This simplifies derivative computation
+// (max mask time 14ms -> 7.5ms), but slows down initial regex construction (15ms -> 75ms).
+// The specialized ByteConcat improves a little max mask (6.5ms), but more importantly
+// speeds up initial construction (11ms).
+// Thus the net effect is 2x faster matching on large enums, and slightly faster regex construction.
+// This comes at the cost of significant code complexity, so we may need to rethink that.
 
 #[derive(Clone, Copy)]
 pub struct ExprFlags(u32);
