@@ -144,6 +144,8 @@ impl ByteCompressor {
         }
 
         let mut trg = ExprSet::new(self.alphabet_size);
+        // this disables Or->Trie conversion; the input should be already optimized this way
+        trg.disable_optimizations();
         for digit in 0..trg.digits.len() {
             trg.digits[digit] = self.mapping[exprset.digits[digit] as usize];
         }
