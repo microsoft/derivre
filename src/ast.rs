@@ -645,7 +645,9 @@ impl Debug for NextByte {
             NextByte::ForcedEOI => write!(f, "ForcedEOI"),
             NextByte::SomeBytes0 => write!(f, "SomeBytes0"),
             NextByte::SomeBytes1(b) => write!(f, "SomeBytes1({:?})", *b as char),
-            NextByte::SomeBytes2([a, b]) => write!(f, "SomeBytes2({:?}, {:?})", *a as char, *b as char),
+            NextByte::SomeBytes2([a, b]) => {
+                write!(f, "SomeBytes2({:?}, {:?})", *a as char, *b as char)
+            }
             NextByte::Dead => write!(f, "Dead"),
         }
     }
