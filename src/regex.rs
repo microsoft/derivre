@@ -87,7 +87,7 @@ impl Debug for StateID {
 #[derive(Clone)]
 pub struct AlphabetInfo {
     mapping: [u8; 256],
-    inv_mapping: [Option<u8>; 256],
+    inv_mapping: [(u8, u8); 256],
     size: usize,
 }
 
@@ -239,16 +239,7 @@ impl Regex {
 
         let e = Self::resolve(&self.rx_sets, state);
         let next_byte = self.next_byte.next_byte(&self.exprs, e);
-        let next_byte = match next_byte {
-            NextByte::ForcedByte(b) => {
-                if let Some(b) = self.alpha.inv_map(b as usize) {
-                    NextByte::ForcedByte(b)
-                } else {
-                    NextByte::SomeBytes
-                }
-            }
-            _ => next_byte,
-        };
+        let next_byte = next_byte.map_alpha(&self.alpha);
         desc.next_byte = Some(next_byte);
         next_byte
     }
@@ -340,16 +331,17 @@ impl AlphabetInfo {
         // disable expensive optimizations after initial construction
         exprset.disable_optimizations();
 
-        let mut inv_alphabet_mapping = [None; 256];
-        let mut num_mappings = [0; 256];
+        let mut inv_alphabet_mapping = [(0u8, 0u8); 256];
+        let mut num_mappings = [0u16; 256];
         for (i, &b) in mapping.iter().enumerate() {
-            inv_alphabet_mapping[b as usize] = Some(i as u8);
-            num_mappings[b as usize] += 1;
-        }
-        for i in 0..alphabet_size {
-            if num_mappings[i] != 1 {
-                inv_alphabet_mapping[i] = None;
+            let bi = b as usize;
+            let i_byte = i as u8;
+            if num_mappings[bi] == 0 {
+                inv_alphabet_mapping[bi] = (i_byte, i_byte);
+            } else if num_mappings[bi] == 1 {
+                inv_alphabet_mapping[bi].1 = i_byte;
             }
+            num_mappings[b as usize] += 1;
         }
 
         debug!(
@@ -383,7 +375,7 @@ impl AlphabetInfo {
         }
     }
 
-    pub fn inv_map(&self, v: usize) -> Option<u8> {
+    pub fn inv_map(&self, v: usize) -> (u8, u8) {
         self.inv_mapping[v]
     }
 

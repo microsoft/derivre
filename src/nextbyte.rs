@@ -8,35 +8,61 @@ pub struct NextByteCache {
 }
 
 pub(crate) fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
-    loop {
+    let mut fuzzy = false;
+    let res = 'dfs: loop {
         match exprs.get(r) {
-            Expr::EmptyString => return NextByte::ForcedEOI,
-            Expr::NoMatch => return NextByte::Dead,
-            Expr::ByteSet(_) => return NextByte::SomeBytes,
-            Expr::Byte(b) => return NextByte::ForcedByte(b),
-            Expr::ByteConcat(_, bytes, _) => return NextByte::ForcedByte(bytes[0]),
-            Expr::And(_, _) => return NextByte::SomeBytes,
-            Expr::Not(_, _) => return NextByte::SomeBytes,
-            Expr::RemainderIs { .. } => return NextByte::SomeBytes,
+            Expr::EmptyString => break NextByte::ForcedEOI,
+            Expr::NoMatch => break NextByte::Dead,
+            Expr::ByteSet(lst) => {
+                let mut b0 = None;
+                for (idx, &w) in lst.iter().enumerate() {
+                    if w > 0 {
+                        let b = (idx as u32 * 32 + w.trailing_zeros()) as u8;
+                        if b0.is_some() {
+                            break 'dfs NextByte::SomeBytes2([b0.unwrap(), b]);
+                        } else {
+                            b0 = Some(b);
+                        }
+                        let w = w & !(1 << (b as u32 % 32));
+                        if w > 0 {
+                            let b2 = (idx as u32 * 32 + w.trailing_zeros()) as u8;
+                            break 'dfs NextByte::SomeBytes2([b, b2]);
+                        }
+                    }
+                }
+                unreachable!("ByteSet should have at least two bytes set");
+            }
+            Expr::Byte(b) => break NextByte::ForcedByte(b),
+            Expr::ByteConcat(_, bytes, _) => break NextByte::ForcedByte(bytes[0]),
+            Expr::Or(_, args) | Expr::And(_, args) => {
+                fuzzy = true;
+                r = args[0];
+            }
+            Expr::Not(_, _) => break NextByte::SomeBytes0,
+            Expr::RemainderIs { .. } => {
+                break NextByte::SomeBytes2([exprs.digits[0], exprs.digits[1]]);
+            }
             Expr::Lookahead(_, e, _) => {
                 r = e;
             }
             Expr::Repeat(_, arg, min, _) => {
                 if min == 0 {
-                    return NextByte::SomeBytes;
-                } else {
-                    r = arg;
+                    fuzzy = true;
                 }
+                r = arg;
             }
             Expr::Concat(_, args) => {
                 if exprs.is_nullable(args[0]) {
-                    return NextByte::SomeBytes;
-                } else {
-                    r = args[0];
+                    fuzzy = true;
                 }
+                r = args[0];
             }
-            Expr::Or(_, _) => return NextByte::SomeBytes,
         }
+    };
+    if fuzzy {
+        res.make_fuzzy()
+    } else {
+        res
     }
 }
 
@@ -59,10 +85,10 @@ impl NextByteCache {
             Expr::Or(_, args) => {
                 let mut found = next_byte_simple(exprs, args[0]);
                 for child in args.iter().skip(1) {
-                    found = found | next_byte_simple(exprs, *child);
-                    if found == NextByte::SomeBytes {
+                    if found.is_some_bytes() {
                         break;
                     }
+                    found = found | next_byte_simple(exprs, *child);
                 }
                 found
             }

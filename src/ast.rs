@@ -1,9 +1,10 @@
 use std::{
+    fmt::Debug,
     hash::Hash,
-    ops::{BitAnd, BitOr, RangeInclusive},
+    ops::{BitOr, RangeInclusive},
 };
 
-use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement};
+use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement, AlphabetInfo};
 use bytemuck_derive::{Pod, Zeroable};
 use hashbrown::HashMap;
 
@@ -621,32 +622,101 @@ impl ExprSet {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum NextByte {
     /// Transition via any other byte, or EOI leads to a dead state.
     ForcedByte(u8),
     /// Transition via any byte leads to a dead state but EOI is possible.
     ForcedEOI,
     /// Transition via some bytes *may be* possible.
-    SomeBytes,
+    /// The bytes are possible examples.
+    SomeBytes0,
+    SomeBytes1(u8),
+    SomeBytes2([u8; 2]),
     /// The current state is dead.
     /// Should be only true for NO_MATCH.
     Dead,
 }
 
-impl BitAnd for NextByte {
-    type Output = Self;
-    fn bitand(self, other: Self) -> Self {
-        if self == other {
-            self
+impl Debug for NextByte {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NextByte::ForcedByte(b) => write!(f, "ForcedByte({:?})", *b as char),
+            NextByte::ForcedEOI => write!(f, "ForcedEOI"),
+            NextByte::SomeBytes0 => write!(f, "SomeBytes0"),
+            NextByte::SomeBytes1(b) => write!(f, "SomeBytes1({:?})", *b as char),
+            NextByte::SomeBytes2([a, b]) => write!(f, "SomeBytes2({:?}, {:?})", *a as char, *b as char),
+            NextByte::Dead => write!(f, "Dead"),
+        }
+    }
+}
+
+impl NextByte {
+    pub fn some_bytes(&self) -> &[u8] {
+        match self {
+            NextByte::ForcedByte(b) => std::slice::from_ref(b),
+            NextByte::SomeBytes1(b) => std::slice::from_ref(b),
+            NextByte::SomeBytes2(b) => b,
+            _ => &[],
+        }
+    }
+
+    pub fn is_some_bytes(&self) -> bool {
+        match self {
+            NextByte::SomeBytes0 | NextByte::SomeBytes1(_) | NextByte::SomeBytes2(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn some_bytes_from_slice(s: &[u8]) -> Self {
+        match s.len() {
+            0 => NextByte::SomeBytes0,
+            1 => NextByte::SomeBytes1(s[0]),
+            _ => NextByte::SomeBytes2([s[0], s[1]]),
+        }
+    }
+
+    pub fn make_fuzzy(&self) -> Self {
+        match self {
+            NextByte::ForcedByte(a) => NextByte::SomeBytes1(*a),
+            NextByte::ForcedEOI => NextByte::SomeBytes0,
+            _ => self.clone(),
+        }
+    }
+
+    fn sorted_some_bytes(a: u8, b: u8) -> Self {
+        assert!(a != b);
+        if a < b {
+            NextByte::SomeBytes2([a, b])
         } else {
-            if self == NextByte::SomeBytes {
-                other
-            } else if other == NextByte::SomeBytes {
-                self
-            } else {
-                NextByte::Dead
+            NextByte::SomeBytes2([b, a])
+        }
+    }
+
+    pub fn map_alpha(&self, alpha: &AlphabetInfo) -> Self {
+        match self {
+            NextByte::ForcedByte(b) => {
+                let (x, y) = alpha.inv_map(*b as usize);
+                if x == y {
+                    NextByte::ForcedByte(x)
+                } else {
+                    Self::sorted_some_bytes(x, y)
+                }
             }
+            NextByte::SomeBytes1(a) => {
+                let (a, b) = alpha.inv_map(*a as usize);
+                if a != b {
+                    Self::sorted_some_bytes(a, b)
+                } else {
+                    NextByte::SomeBytes1(a)
+                }
+            }
+            NextByte::SomeBytes2([a, b]) => {
+                let a = alpha.inv_map(*a as usize).0;
+                let b = alpha.inv_map(*b as usize).0;
+                Self::sorted_some_bytes(a, b)
+            }
+            _ => self.clone(),
         }
     }
 }
@@ -654,15 +724,33 @@ impl BitAnd for NextByte {
 impl BitOr for NextByte {
     type Output = Self;
     fn bitor(self, other: Self) -> Self {
-        if self == other {
-            self
-        } else {
-            if self == NextByte::Dead {
-                other
-            } else if other == NextByte::Dead {
-                self
-            } else {
-                NextByte::SomeBytes
+        match (self, other) {
+            (NextByte::Dead, _) => other,
+            (_, NextByte::Dead) => self,
+            (NextByte::ForcedByte(a), NextByte::ForcedByte(b)) => {
+                if a == b {
+                    self
+                } else {
+                    NextByte::SomeBytes2([a, b])
+                }
+            }
+            (NextByte::ForcedEOI, NextByte::ForcedEOI) => self,
+            _ => {
+                let a = self.some_bytes();
+                let b = other.some_bytes();
+                if a.is_empty() || b.len() > 1 {
+                    NextByte::some_bytes_from_slice(b)
+                } else if b.is_empty() || a.len() > 1 {
+                    NextByte::some_bytes_from_slice(a)
+                } else {
+                    let a = a[0];
+                    let b = b[0];
+                    if a == b {
+                        NextByte::SomeBytes1(a)
+                    } else {
+                        NextByte::SomeBytes2([a, b])
+                    }
+                }
             }
         }
     }
