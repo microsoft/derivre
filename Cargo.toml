@@ -8,16 +8,16 @@ name = "derivre"
 
 [dependencies]
 ahash = "0.8.11"
-anyhow = "1.0.75"
-bytemuck = "1.16.0"
-bytemuck_derive = "1.6.1"
+anyhow = "1.0.95"
+bytemuck = "1.21.0"
+bytemuck_derive = "1.8.1"
 hashbrown = "0.15.2"
-regex-syntax = { version = "0.8.3" }
+regex-syntax = "0.8.5"
 
 [dev-dependencies]
-serde = { version = "1.0.203", features = ["derive"] }
-toml = "0.8.13"
-bstr = { version = "1.9.1", default-features = false, features = ["std", "serde"] }
+serde = { version = "1.0.217", features = ["derive"] }
+toml = "0.8.20"
+bstr = { version = "1.11.3", default-features = false, features = ["std", "serde"] }
 
 [[bin]]
 name = "derivre"
