@@ -3,6 +3,8 @@ name: Rust
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ "main" ]
 
@@ -21,3 +23,16 @@ jobs:
       run: cargo build --verbose --locked
     - name: Run tests
       run: cargo test --verbose
+
+  crates:
+    name: Upload to crates.io
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pkg
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
