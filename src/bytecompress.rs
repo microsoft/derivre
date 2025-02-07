@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use hashbrown::HashMap;
+use crate::HashMap;
 
 use crate::{
     ast::{byteset_contains, byteset_set, Expr, ExprSet},
@@ -22,7 +22,7 @@ impl ByteCompressor {
             mapping: Vec::new(),
             alphabet_size: 0,
             bytesets: Vec::new(),
-            map_cache: HashMap::new(),
+            map_cache: HashMap::default(),
         }
     }
 
@@ -163,7 +163,7 @@ impl ByteCompressor {
         alloc: impl Fn(usize) -> T,
         set_true: impl Fn(&mut T, usize),
     ) {
-        let mut byte_mapping = HashMap::new();
+        let mut byte_mapping = HashMap::default();
         for b in 0..self.mapping.len() {
             if self.mapping[b] == INVALID_MAPPING {
                 let mut v = alloc(self.bytesets.len());

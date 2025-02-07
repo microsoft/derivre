@@ -1,5 +1,5 @@
 use anyhow::Result;
-use hashbrown::{HashMap, HashSet};
+use crate::{HashMap, HashSet};
 
 use crate::{
     ast::{Expr, ExprRef, ExprSet},
@@ -462,7 +462,7 @@ impl RelevanceCache {
 
         // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
         let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
-        let mut pending = HashSet::new();
+        let mut pending = HashSet::default();
         let mut front_wave = vec![top_expr];
         pending.insert(top_expr);
 

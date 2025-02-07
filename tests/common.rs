@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Context as _, Result};
 use bstr::{BString, ByteSlice, ByteVec as _};
-use hashbrown::HashSet;
+use derivre::HashSet;
 use serde::Deserialize;
 
 /*
@@ -64,7 +64,7 @@ impl RegexTests {
     pub fn new() -> RegexTests {
         RegexTests {
             tests: vec![],
-            seen: HashSet::new(),
+            seen: HashSet::default(),
         }
     }
 

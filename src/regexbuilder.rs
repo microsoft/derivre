@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::{ensure, Result};
-use hashbrown::HashMap;
+use crate::HashMap;
 use regex_syntax::ParserBuilder;
 
 use crate::{
@@ -243,7 +243,7 @@ impl RegexBuilder {
         Self {
             parser_builder: ParserBuilder::new(),
             exprset: ExprSet::new(256),
-            json_quote_cache: HashMap::new(),
+            json_quote_cache: HashMap::default(),
         }
     }
 

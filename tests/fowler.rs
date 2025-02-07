@@ -3,7 +3,7 @@ use derivre::{Regex, StateID};
 
 mod common;
 use common::RegexTests;
-use hashbrown::HashSet;
+use derivre::HashSet;
 
 fn suite() -> Result<RegexTests> {
     let mut tests = RegexTests::new();

@@ -15,7 +15,7 @@ ahash = "0.8.11"
 anyhow = "1.0.95"
 bytemuck = "1.21.0"
 bytemuck_derive = "1.8.1"
-hashbrown = "0.15.2"
+hashbrown = { version = "0.15.2", default-features = false }
 regex-syntax = "0.8.5"
 
 [dev-dependencies]

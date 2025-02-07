@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 
-use hashbrown::HashMap;
+use crate::HashMap;
 
 use crate::{
     ast::{byteset_256, byteset_contains, byteset_set, Expr, ExprSet},
@@ -65,7 +65,7 @@ impl PrettyPrinter {
             return "".to_string();
         }
 
-        let mut bytes_by_alpha_id = HashMap::new();
+        let mut bytes_by_alpha_id = HashMap::default();
         for (b, &alpha_id) in self.alphabet_mapping.iter().enumerate() {
             bytes_by_alpha_id
                 .entry(alpha_id)

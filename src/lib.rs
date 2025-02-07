@@ -19,6 +19,9 @@ pub use regexbuilder::{JsonQuoteOptions, RegexAst, RegexBuilder};
 
 pub use mapper::map_ast; // utility function
 
+pub use ahash::HashMap;
+pub use ahash::HashSet;
+
 pub mod raw {
     pub use super::ast::ExprSet;
     pub use super::deriv::DerivCache;

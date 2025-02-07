@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use crate::HashMap;
 
 use crate::ast::{Expr, ExprRef, ExprSet, NextByte};
 

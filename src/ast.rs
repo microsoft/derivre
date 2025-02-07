@@ -6,7 +6,7 @@ use std::{
 
 use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement, AlphabetInfo};
 use bytemuck_derive::{Pod, Zeroable};
-use hashbrown::HashMap;
+use crate::HashMap;
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
@@ -361,7 +361,7 @@ impl ExprSet {
             cost: 0,
             pp: PrettyPrinter::new_simple(alphabet_size),
             optimize: true,
-            unicode_cache: HashMap::new(),
+            unicode_cache: HashMap::default(),
         };
 
         let id = r.exprs.insert(&[]);
@@ -560,7 +560,7 @@ impl ExprSet {
         r: ExprRef,
         process: impl FnMut(&mut ExprSet, &mut Vec<V>, ExprRef) -> V,
     ) -> V {
-        let mut cache = HashMap::new();
+        let mut cache = HashMap::default();
         let concat_nullable_check = false;
         self.map(r, &mut cache, concat_nullable_check, |e| e, process)
     }

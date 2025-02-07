@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
-use hashbrown::HashSet;
+use crate::HashSet;
 
 use crate::{
     ast::{ExprRef, ExprSet, NextByte},
@@ -258,7 +258,7 @@ impl Regex {
     }
 
     pub fn dfa(&mut self) -> Vec<u8> {
-        let mut used = HashSet::new();
+        let mut used = HashSet::default();
         let mut designated_bytes = vec![];
         for b in 0..=255 {
             let m = self.alpha.map(b);
@@ -269,7 +269,7 @@ impl Regex {
         }
 
         let mut stack = vec![self.initial_state()];
-        let mut visited = HashSet::new();
+        let mut visited = HashSet::default();
         while let Some(state) = stack.pop() {
             for b in &designated_bytes {
                 let new_state = self.transition(state, *b);
