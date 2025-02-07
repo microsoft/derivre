@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use anyhow::Result;
 use crate::HashSet;
+use anyhow::Result;
 
 use crate::{
     ast::{ExprRef, ExprSet, NextByte},

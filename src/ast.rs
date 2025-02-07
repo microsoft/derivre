@@ -4,9 +4,9 @@ use std::{
     ops::{BitOr, RangeInclusive},
 };
 
+use crate::HashMap;
 use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement, AlphabetInfo};
 use bytemuck_derive::{Pod, Zeroable};
-use crate::HashMap;
 
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]

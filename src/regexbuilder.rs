@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
-use anyhow::{ensure, Result};
 use crate::HashMap;
+use anyhow::{ensure, Result};
 use regex_syntax::ParserBuilder;
 
 use crate::{

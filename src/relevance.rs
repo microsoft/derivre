@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::{HashMap, HashSet};
+use anyhow::Result;
 
 use crate::{
     ast::{Expr, ExprRef, ExprSet},
