@@ -32,3 +32,5 @@ path = "src/derivre.rs"
 default = ["compress"]
 # default = []
 compress = []
+
+# [workspace]
