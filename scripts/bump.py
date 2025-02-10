@@ -31,6 +31,11 @@ def update_version_in_file(file_path, new_version):
                          content)
 
     with open(file_path, "w") as f:
+        f.write(new_content + "\n[workspace]\n")
+
+    subprocess.run(["cargo", "check"], check=True)
+
+    with open(file_path, "w") as f:
         f.write(new_content)
 
 
@@ -67,7 +72,6 @@ def main():
                    or suggested_version)
 
     update_version_in_file("Cargo.toml", new_version)
-    subprocess.run(["cargo", "check"], check=True)
 
     check_in_and_tag(new_version)
 
