@@ -19,8 +19,14 @@ pub use regexbuilder::{JsonQuoteOptions, RegexAst, RegexBuilder};
 
 pub use mapper::map_ast; // utility function
 
-pub use ahash::HashMap;
-pub use ahash::HashSet;
+#[cfg(feature = "ahash")]
+pub type RandomState = ahash::RandomState;
+
+#[cfg(not(feature = "ahash"))]
+pub type RandomState = std::collections::hash_map::RandomState;
+
+pub type HashMap<K, V> = std::collections::HashMap<K, V, RandomState>;
+pub type HashSet<K> = std::collections::HashSet<K, RandomState>;
 
 pub mod raw {
     pub use super::ast::ExprSet;

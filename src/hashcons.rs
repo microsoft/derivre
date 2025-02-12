@@ -1,7 +1,9 @@
-use ahash::RandomState;
 use hashbrown::hash_table::Entry;
+use std::hash::{BuildHasher, Hasher};
 
 use hashbrown::HashTable;
+
+use crate::RandomState;
 
 #[derive(Debug, Clone)]
 struct Element {
@@ -116,12 +118,17 @@ impl VecHashCons {
     /// Returns the unique id of the vector.
     /// Requires start_insert() to have been called.
     pub fn finish_insert(&mut self) -> u32 {
-        let hasher = &self.hasher;
+        let hash_slice = |x: &[u32]| -> u64 {
+            let mut hasher = self.hasher.build_hasher();
+            hasher.write(bytemuck::cast_slice(x));
+            // x.hash(&mut hasher);
+            hasher.finish()
+        };
         let curr_backing = &self.backing[self.curr_elt.as_range()];
-        let hash = hasher.hash_one(curr_backing);
+        let hash = hash_slice(curr_backing);
         let get_slice =
             |x: &u32| -> &[u32] { &self.backing[self.elements[*x as usize].as_range()] };
-        let hasher = |x: &u32| -> u64 { hasher.hash_one(get_slice(x)) };
+        let hasher = |x: &u32| -> u64 { hash_slice(get_slice(x)) };
         let eq = |x: &u32| -> bool { get_slice(x) == curr_backing };
 
         match self.table.entry(hash, eq, hasher) {

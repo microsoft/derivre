@@ -11,7 +11,7 @@ repository = "https://github.com/microsoft/derivre"
 name = "derivre"
 
 [dependencies]
-ahash = "0.8.11"
+ahash = { version = "0.8.11", optional = true }
 anyhow = "1.0.95"
 bytemuck = "1.21.0"
 bytemuck_derive = "1.8.1"
@@ -29,8 +29,9 @@ name = "derivre"
 path = "src/derivre.rs"
 
 [features]
-default = ["compress"]
-# default = []
+default = ["compress", "ahash"]
+# default = ["ahash"]
 compress = []
+ahash = ["dep:ahash"]
 
 # [workspace]
