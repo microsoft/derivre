@@ -247,22 +247,6 @@ impl<'a> Expr<'a> {
         self.get_flags().is_nullable()
     }
 
-    fn bytes_from_slice(s: &[u32]) -> Option<&[u8]> {
-        let tag = ExprTag::from_u8((s[0] & 0xff) as u8);
-        match tag {
-            ExprTag::Byte => {
-                let bslice: &[u8] = bytemuck::cast_slice(&s[1..2]);
-                Some(&bslice[0..1])
-            }
-            ExprTag::ByteConcat => {
-                let bytes0: &[u8] = bytemuck::cast_slice(&s[2..]);
-                Some(&bytes0[1..(bytes0[0] + 1) as usize])
-            }
-            _ => None,
-        }
-    }
-
-    #[inline(always)]
     fn from_slice(s: &'a [u32]) -> Expr<'a> {
         let flags = ExprFlags(s[0] & !0xff);
         let tag = ExprTag::from_u8((s[0] & 0xff) as u8);
@@ -483,7 +467,15 @@ impl ExprSet {
     }
 
     pub(crate) fn get_bytes(&self, id: ExprRef) -> Option<&[u8]> {
-        Expr::bytes_from_slice(self.exprs.get(id.0))
+        let slice = self.exprs.get(id.0);
+        match Expr::from_slice(slice) {
+            Expr::Byte(_) => {
+                let bslice: &[u8] = bytemuck::cast_slice(&slice[1..2]);
+                Some(&bslice[0..1])
+            }
+            Expr::ByteConcat(_, bytes, _) => Some(bytes),
+            _ => None,
+        }
     }
 
     pub fn is_valid(&self, id: ExprRef) -> bool {

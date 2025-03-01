@@ -198,24 +198,7 @@ impl ExprSet {
     fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
         let args0 = args.clone();
 
-        // if args.len() == 2 {
-        //     let b0 = self.iter_concat_bytes(args[0]).next();
-        //     let b1 = self.iter_concat_bytes(args[1]).next();
-        //     if b0 != b1 {
-        //         return self.mk(Expr::Or(flags, &args0));
-        //     }
-        // } else if args.len() == 3 {
-        //     let b0 = self.iter_concat_bytes(args[0]).next();
-        //     let b1 = self.iter_concat_bytes(args[1]).next();
-        //     let b2 = self.iter_concat_bytes(args[2]).next();
-        //     if b0 != b1 && b0 != b2 && b1 != b2 {
-        //         return self.mk(Expr::Or(flags, &args0));
-        //     }
-        // }
-
-        //let t0 = std::time::Instant::now();
         args.sort_unstable_by(|&a, &b| self.iter_concat_bytes(a).cmp(self.iter_concat_bytes(b)));
-        //println!("or_args: {} {}", args.len(), t0.elapsed().as_nanos());
 
         let mut prev = None;
         let mut has_double = false;
@@ -769,14 +752,14 @@ impl<'a> Iterator for ConcatByteIter<'a> {
 
 #[derive(Clone)]
 struct ConcatBytePointer {
-    pending: Option<(ExprRef, usize)>,
+    pending: Vec<u8>,
     current: Option<ExprRef>,
 }
 
 impl ConcatBytePointer {
     pub fn new(curr: ExprRef) -> Self {
         ConcatBytePointer {
-            pending: None,
+            pending: Vec::new(),
             current: Some(curr),
         }
     }
@@ -787,67 +770,34 @@ impl ConcatBytePointer {
     }
 
     pub fn next(&mut self, exprset: &ExprSet) -> Option<ByteConcatElement> {
-        if let Some((e, idx)) = self.pending {
-            let bytes = exprset.get_bytes(e).unwrap();
-            let b = bytes[idx];
-            if idx + 1 < bytes.len() {
-                self.pending = Some((e, idx + 1));
-            } else {
-                self.pending = None;
-            }
-            return Some(ByteConcatElement::Byte(b));
+        if self.pending.len() > 0 {
+            return Some(ByteConcatElement::Byte(self.pending.pop().unwrap()));
         }
 
         let curr = self.current?;
 
         let mut it = exprset.iter_concat(curr);
-        let tmp = it.next_expr();
+        let tmp = it.next();
         self.current = it.current;
         match tmp {
-            Some(expr) => {
-                if let Some(bytes) = exprset.get_bytes(expr) {
-                    if bytes.len() > 1 {
-                        self.pending = Some((expr, 1));
-                    }
-                    Some(ByteConcatElement::Byte(bytes[0]))
-                } else {
-                    Some(ByteConcatElement::Expr(expr))
-                }
+            Some(ConcatElement::Bytes(bytes)) => {
+                self.pending = bytes.to_vec();
+                self.pending.reverse();
+                Some(ByteConcatElement::Byte(self.pending.pop().unwrap()))
             }
+            Some(ConcatElement::Expr(expr)) => Some(ByteConcatElement::Expr(expr)),
             None => None,
         }
     }
 
     pub fn snapshot(&self, exprset: &mut ExprSet) -> ExprRef {
         let tail = self.current.unwrap_or(ExprRef::EMPTY_STRING);
-        if let Some((expr, idx)) = self.pending {
-            let bytes = exprset.get_bytes(expr).unwrap();
-            let copy = bytes[idx..].to_vec();
-            exprset.mk_byte_concat(&copy, tail)
-        } else {
+        if self.pending.len() == 0 {
             tail
-        }
-    }
-}
-
-impl<'a> ConcatIter<'a> {
-    #[inline(always)]
-    fn next_expr(&mut self) -> Option<ExprRef> {
-        let curr = self.current?;
-        let expr = self.exprs.get(curr);
-        match expr {
-            Expr::Concat(_, [l, r]) => {
-                self.current = Some(r);
-                Some(l)
-            }
-            Expr::ByteConcat(_, _, tail) => {
-                self.current = Some(tail);
-                Some(curr)
-            }
-            _ => {
-                self.current = None;
-                Some(curr)
-            }
+        } else {
+            let mut bytes = self.pending.clone();
+            bytes.reverse();
+            exprset.mk_byte_concat(&bytes, tail)
         }
     }
 }
@@ -856,12 +806,29 @@ impl<'a> Iterator for ConcatIter<'a> {
     type Item = ConcatElement<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next_expr().map(|e| {
-            if let Some(bytes) = self.exprs.get_bytes(e) {
-                ConcatElement::Bytes(bytes)
-            } else {
-                ConcatElement::Expr(e)
+        let curr = self.current?;
+        let expr = self.exprs.get(curr);
+        match expr {
+            Expr::Concat(_, [l, r]) => {
+                self.current = Some(r);
+                if let Some(bytes) = self.exprs.get_bytes(l) {
+                    Some(ConcatElement::Bytes(bytes))
+                } else {
+                    Some(ConcatElement::Expr(l))
+                }
             }
-        })
+            Expr::ByteConcat(_, bytes, tail) => {
+                self.current = Some(tail);
+                Some(ConcatElement::Bytes(bytes))
+            }
+            _ => {
+                self.current = None;
+                if let Some(bytes) = self.exprs.get_bytes(curr) {
+                    Some(ConcatElement::Bytes(bytes))
+                } else {
+                    Some(ConcatElement::Expr(curr))
+                }
+            }
+        }
     }
 }
