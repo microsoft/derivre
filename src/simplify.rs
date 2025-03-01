@@ -224,6 +224,48 @@ impl ExprSet {
         }
     }
 
+    pub fn mk_prefix_tree(&mut self, mut branches: Vec<(Vec<u8>, ExprRef)>) -> ExprRef {
+        branches.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+        let mut prev = None;
+        let mut has_double = false;
+        for c in branches.iter() {
+            let c0 = c.0.get(0);
+            if c0 == prev {
+                has_double = true;
+                break;
+            }
+            prev = c0;
+        }
+
+        let prev_opt = self.optimize;
+        self.optimize = false;
+        
+        let r = if !has_double {
+            let mut refs = branches
+                .iter()
+                .map(|(p, e)| self.mk_byte_concat(p, *e))
+                .collect::<Vec<_>>();
+            self.mk_or(&mut refs)
+        } else {
+            let mut args = branches
+                .into_iter()
+                .map(|mut a| {
+                    a.0.reverse();
+                    ConcatBytePointer {
+                        pending: a.0,
+                        current: Some(a.1),
+                    }
+                })
+                .collect::<Vec<_>>();
+            self.trie_rec(args.as_mut_slice(), 0)
+        };
+
+        self.optimize = prev_opt;
+
+        r
+    }
+
     // The idea is to optimize regexps like identifier1|identifier2|...|identifier50000
     // into a "trie" with shared prefixes;
     // for example: (foo|far|bar|baz) => (ba[rz]|f(oo|ar))

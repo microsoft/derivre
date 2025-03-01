@@ -524,6 +524,10 @@ impl RegexBuilder {
         Ok(self.to_regex_limited(r, max_fuel)?.always_empty())
     }
 
+    pub fn mk_prefix_tree(&mut self, branches: Vec<(Vec<u8>, ExprRef)>) -> Result<ExprRef> {
+        Ok(self.exprset.mk_prefix_tree(branches))
+    }
+
     pub fn mk(&mut self, ast: &RegexAst) -> Result<ExprRef> {
         map_ast(
             ast,

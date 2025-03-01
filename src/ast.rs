@@ -247,6 +247,7 @@ impl<'a> Expr<'a> {
         self.get_flags().is_nullable()
     }
 
+    #[inline(always)]
     fn from_slice(s: &'a [u32]) -> Expr<'a> {
         let flags = ExprFlags(s[0] & !0xff);
         let tag = ExprTag::from_u8((s[0] & 0xff) as u8);
