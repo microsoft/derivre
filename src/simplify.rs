@@ -240,7 +240,7 @@ impl ExprSet {
 
         let prev_opt = self.optimize;
         self.optimize = false;
-        
+
         let r = if !has_double {
             let mut refs = branches
                 .iter()
@@ -250,12 +250,10 @@ impl ExprSet {
         } else {
             let mut args = branches
                 .into_iter()
-                .map(|mut a| {
-                    a.0.reverse();
-                    ConcatBytePointer {
-                        pending: a.0,
-                        current: Some(a.1),
-                    }
+                .map(|a| ConcatBytePointer {
+                    pending: a.0,
+                    pending_ptr: 0,
+                    current: Some(a.1),
                 })
                 .collect::<Vec<_>>();
             self.trie_rec(args.as_mut_slice(), 0)
@@ -794,6 +792,7 @@ impl<'a> Iterator for ConcatByteIter<'a> {
 
 #[derive(Clone)]
 struct ConcatBytePointer {
+    pending_ptr: usize,
     pending: Vec<u8>,
     current: Option<ExprRef>,
 }
@@ -801,6 +800,7 @@ struct ConcatBytePointer {
 impl ConcatBytePointer {
     pub fn new(curr: ExprRef) -> Self {
         ConcatBytePointer {
+            pending_ptr: 0,
             pending: Vec::new(),
             current: Some(curr),
         }
@@ -812,8 +812,10 @@ impl ConcatBytePointer {
     }
 
     pub fn next(&mut self, exprset: &ExprSet) -> Option<ByteConcatElement> {
-        if self.pending.len() > 0 {
-            return Some(ByteConcatElement::Byte(self.pending.pop().unwrap()));
+        if self.pending_ptr < self.pending.len() {
+            let b = self.pending[self.pending_ptr];
+            self.pending_ptr += 1;
+            return Some(ByteConcatElement::Byte(b));
         }
 
         let curr = self.current?;
@@ -823,9 +825,10 @@ impl ConcatBytePointer {
         self.current = it.current;
         match tmp {
             Some(ConcatElement::Bytes(bytes)) => {
-                self.pending = bytes.to_vec();
-                self.pending.reverse();
-                Some(ByteConcatElement::Byte(self.pending.pop().unwrap()))
+                let b0 = bytes[0];
+                self.pending = bytes[1..].to_vec();
+                self.pending_ptr = 0;
+                Some(ByteConcatElement::Byte(b0))
             }
             Some(ConcatElement::Expr(expr)) => Some(ByteConcatElement::Expr(expr)),
             None => None,
@@ -834,12 +837,10 @@ impl ConcatBytePointer {
 
     pub fn snapshot(&self, exprset: &mut ExprSet) -> ExprRef {
         let tail = self.current.unwrap_or(ExprRef::EMPTY_STRING);
-        if self.pending.len() == 0 {
+        if self.pending_ptr >= self.pending.len() {
             tail
         } else {
-            let mut bytes = self.pending.clone();
-            bytes.reverse();
-            exprset.mk_byte_concat(&bytes, tail)
+            exprset.mk_byte_concat(&self.pending[self.pending_ptr..], tail)
         }
     }
 }
