@@ -114,6 +114,22 @@ impl VecHashCons {
             .copy_from_slice(elts);
     }
 
+    pub fn reserve(&mut self, size: usize) {
+        self.backing.reserve(size * 4);
+        self.elements.reserve(size);
+
+        let hash_slice = |x: &[u32]| -> u64 {
+            let mut hasher = self.hasher.build_hasher();
+            hasher.write(bytemuck::cast_slice(x));
+            hasher.finish()
+        };
+        let get_slice =
+            |x: &u32| -> &[u32] { &self.backing[self.elements[*x as usize].as_range()] };
+        let hasher = |x: &u32| -> u64 { hash_slice(get_slice(x)) };
+
+        self.table.reserve(size, hasher);
+    }
+
     /// Finish insertion process for a vector.
     /// Returns the unique id of the vector.
     /// Requires start_insert() to have been called.

@@ -459,6 +459,10 @@ impl ExprSet {
         Expr::from_slice(self.exprs.get(id.0))
     }
 
+    pub fn reserve(&mut self, size: usize) {
+        self.exprs.reserve(size);
+    }
+
     pub(crate) fn get_bytes(&self, id: ExprRef) -> Option<&[u8]> {
         let slice = self.exprs.get(id.0);
         match Expr::from_slice(slice) {

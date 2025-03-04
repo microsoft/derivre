@@ -271,6 +271,10 @@ impl RegexBuilder {
         self.exprset
     }
 
+    pub fn reserve(&mut self, size: usize) {
+        self.exprset.reserve(size);
+    }
+
     pub fn json_quote(&mut self, e: ExprRef, options: &JsonQuoteOptions) -> Result<ExprRef> {
         // returns Some(X) iff b should quoted as \X
         fn quote(b: u8) -> Option<u8> {
