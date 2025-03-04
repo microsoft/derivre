@@ -87,7 +87,6 @@ impl Debug for StateID {
 #[derive(Clone)]
 pub struct AlphabetInfo {
     mapping: [u8; 256],
-    inv_mapping: [(u8, u8); 256],
     size: usize,
 }
 
@@ -170,7 +169,7 @@ impl Regex {
         if new_state != StateID::MISSING {
             new_state
         } else {
-            let new_state = self.transition_inner(state, self.alpha.map(b) as u8);
+            let new_state = self.transition_inner(state, b);
             self.num_transitions += 1;
             self.state_table[idx] = new_state;
             new_state
@@ -239,7 +238,6 @@ impl Regex {
 
         let e = Self::resolve(&self.rx_sets, state);
         let next_byte = self.next_byte.next_byte(&self.exprs, e);
-        let next_byte = next_byte.map_alpha(&self.alpha);
         desc.next_byte = Some(next_byte);
         next_byte
     }
@@ -301,7 +299,7 @@ impl Regex {
 
 impl AlphabetInfo {
     pub fn from_exprset(exprset: &ExprSet, rx_list: &[ExprRef]) -> (Self, ExprSet, Vec<ExprRef>) {
-        assert!(exprset.alphabet_size() == 256);
+        assert!(exprset.alphabet_size == 256);
 
         debug!("rx0: {}", exprset.expr_to_string_with_info(rx_list[0]));
 
@@ -320,7 +318,7 @@ impl AlphabetInfo {
                 compressor.alphabet_size,
             )
         } else {
-            let alphabet_size = exprset.alphabet_size();
+            let alphabet_size = exprset.alphabet_size;
             (
                 (exprset.clone(), rx_list.to_vec()),
                 (0..=255).collect(),
@@ -331,19 +329,6 @@ impl AlphabetInfo {
         // disable expensive optimizations after initial construction
         exprset.disable_optimizations();
 
-        let mut inv_alphabet_mapping = [(0u8, 0u8); 256];
-        let mut num_mappings = [0u16; 256];
-        for (i, &b) in mapping.iter().enumerate() {
-            let bi = b as usize;
-            let i_byte = i as u8;
-            if num_mappings[bi] == 0 {
-                inv_alphabet_mapping[bi] = (i_byte, i_byte);
-            } else if num_mappings[bi] == 1 {
-                inv_alphabet_mapping[bi].1 = i_byte;
-            }
-            num_mappings[b as usize] += 1;
-        }
-
         debug!(
             "compressed: {}",
             exprset.expr_to_string_with_info(rx_list[0])
@@ -351,7 +336,6 @@ impl AlphabetInfo {
 
         let alpha = AlphabetInfo {
             mapping: mapping.try_into().unwrap(),
-            inv_mapping: inv_alphabet_mapping,
             size: alphabet_size,
         };
         (alpha, exprset, rx_list.to_vec())
@@ -373,10 +357,6 @@ impl AlphabetInfo {
         } else {
             b as usize + state.as_usize() * 256
         }
-    }
-
-    pub fn inv_map(&self, v: usize) -> (u8, u8) {
-        self.inv_mapping[v]
     }
 
     #[inline(always)]

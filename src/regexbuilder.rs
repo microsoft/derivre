@@ -559,7 +559,7 @@ impl RegexBuilder {
                     RegexAst::Byte(b) => self.exprset.mk_byte(*b),
                     RegexAst::ByteSet(bs) => {
                         ensure!(
-                            bs.len() == self.exprset.alphabet_words(),
+                            bs.len() == self.exprset.alphabet_words,
                             "invalid byteset len"
                         );
                         self.exprset.mk_byte_set(bs)

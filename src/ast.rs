@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::HashMap;
-use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement, AlphabetInfo};
+use crate::{hashcons::VecHashCons, pp::PrettyPrinter, simplify::OwnedConcatElement};
 use bytemuck_derive::{Pod, Zeroable};
 use strum::FromRepr;
 
@@ -439,14 +439,6 @@ impl ExprSet {
         r
     }
 
-    pub fn alphabet_size(&self) -> usize {
-        self.alphabet_size
-    }
-
-    pub fn alphabet_words(&self) -> usize {
-        self.alphabet_words
-    }
-
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.exprs.len()
@@ -681,42 +673,6 @@ impl NextByte {
         match self {
             NextByte::ForcedByte(a) => NextByte::SomeBytes1(*a),
             NextByte::ForcedEOI => NextByte::SomeBytes0,
-            _ => self.clone(),
-        }
-    }
-
-    fn sorted_some_bytes(a: u8, b: u8) -> Self {
-        assert!(a != b);
-        if a < b {
-            NextByte::SomeBytes2([a, b])
-        } else {
-            NextByte::SomeBytes2([b, a])
-        }
-    }
-
-    pub fn map_alpha(&self, alpha: &AlphabetInfo) -> Self {
-        match self {
-            NextByte::ForcedByte(b) => {
-                let (x, y) = alpha.inv_map(*b as usize);
-                if x == y {
-                    NextByte::ForcedByte(x)
-                } else {
-                    Self::sorted_some_bytes(x, y)
-                }
-            }
-            NextByte::SomeBytes1(a) => {
-                let (a, b) = alpha.inv_map(*a as usize);
-                if a != b {
-                    Self::sorted_some_bytes(a, b)
-                } else {
-                    NextByte::SomeBytes1(a)
-                }
-            }
-            NextByte::SomeBytes2([a, b]) => {
-                let a = alpha.inv_map(*a as usize).0;
-                let b = alpha.inv_map(*b as usize).0;
-                Self::sorted_some_bytes(a, b)
-            }
             _ => self.clone(),
         }
     }
