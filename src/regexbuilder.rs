@@ -248,15 +248,27 @@ impl RegexBuilder {
     }
 
     pub fn to_regex_limited(&self, r: ExprRef, max_fuel: u64) -> Result<Regex> {
-        Regex::new_with_exprset(&self.exprset, r, max_fuel)
+        Regex::new_with_exprset(self.exprset.clone(), r, max_fuel)
     }
 
     pub fn to_regex(&self, r: ExprRef) -> Regex {
-        Regex::new_with_exprset(&self.exprset, r, u64::MAX).unwrap()
+        Regex::new_with_exprset(self.exprset.clone(), r, u64::MAX).unwrap()
+    }
+
+    pub fn into_regex_limited(self, r: ExprRef, max_fuel: u64) -> Result<Regex> {
+        Regex::new_with_exprset(self.exprset, r, max_fuel)
+    }
+
+    pub fn into_regex(self, r: ExprRef) -> Regex {
+        Regex::new_with_exprset(self.exprset, r, u64::MAX).unwrap()
     }
 
     pub fn exprset(&self) -> &ExprSet {
         &self.exprset
+    }
+
+    pub fn into_exprset(self) -> ExprSet {
+        self.exprset
     }
 
     pub fn json_quote(&mut self, e: ExprRef, options: &JsonQuoteOptions) -> Result<ExprRef> {
@@ -521,7 +533,7 @@ impl RegexBuilder {
 
     pub fn is_contained_in(&mut self, small: &str, big: &str, max_fuel: u64) -> Result<bool> {
         let r = self.mk_contained_in(small, big)?;
-        Ok(self.to_regex_limited(r, max_fuel)?.always_empty())
+        Ok(self.clone().to_regex_limited(r, max_fuel)?.always_empty())
     }
 
     pub fn mk_prefix_tree(&mut self, branches: Vec<(Vec<u8>, ExprRef)>) -> Result<ExprRef> {

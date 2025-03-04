@@ -122,7 +122,7 @@ impl Regex {
     pub fn new_with_parser(parser: regex_syntax::Parser, rx: &str) -> Result<Self> {
         let mut exprset = ExprSet::new(256);
         let rx = exprset.parse_expr(parser.clone(), rx)?;
-        Ok(Self::new_with_exprset(&exprset, rx, u64::MAX)?)
+        Ok(Self::new_with_exprset(exprset, rx, u64::MAX)?)
     }
 
     pub fn alpha(&self) -> &AlphabetInfo {
@@ -298,7 +298,7 @@ impl Regex {
 }
 
 impl AlphabetInfo {
-    pub fn from_exprset(exprset: &ExprSet, rx_list: &[ExprRef]) -> (Self, ExprSet, Vec<ExprRef>) {
+    pub fn from_exprset(exprset: ExprSet, rx_list: &[ExprRef]) -> (Self, ExprSet, Vec<ExprRef>) {
         assert!(exprset.alphabet_size == 256);
 
         debug!("rx0: {}", exprset.expr_to_string_with_info(rx_list[0]));
@@ -306,7 +306,7 @@ impl AlphabetInfo {
         let ((mut exprset, rx_list), mapping, alphabet_size) = if cfg!(feature = "compress") {
             let mut compressor = ByteCompressor::new();
             let cost0 = exprset.cost;
-            let (mut exprset, rx_list) = compressor.compress(&exprset, rx_list);
+            let (mut exprset, rx_list) = compressor.compress(exprset, rx_list);
             exprset.cost += cost0;
             exprset.set_pp(PrettyPrinter::new(
                 compressor.mapping.clone(),
@@ -320,7 +320,7 @@ impl AlphabetInfo {
         } else {
             let alphabet_size = exprset.alphabet_size;
             (
-                (exprset.clone(), rx_list.to_vec()),
+                (exprset, rx_list.to_vec()),
                 (0..=255).collect(),
                 alphabet_size,
             )
@@ -376,7 +376,7 @@ impl AlphabetInfo {
 // private implementation
 impl Regex {
     pub fn is_contained_in_prefixes(
-        exprset: &ExprSet,
+        exprset: ExprSet,
         small: ExprRef,
         big: ExprRef,
         relevance_fuel: u64,
@@ -395,7 +395,7 @@ impl Regex {
         )
     }
 
-    fn prep_regex(exprset: &ExprSet, top_rxs: &[ExprRef]) -> (Self, Vec<ExprRef>) {
+    fn prep_regex(exprset: ExprSet, top_rxs: &[ExprRef]) -> (Self, Vec<ExprRef>) {
         let (alpha, exprset, rx_list) = AlphabetInfo::from_exprset(exprset, top_rxs);
         let num_ast_nodes = exprset.len();
 
@@ -433,7 +433,7 @@ impl Regex {
     }
 
     pub(crate) fn new_with_exprset(
-        exprset: &ExprSet,
+        exprset: ExprSet,
         top_rx: ExprRef,
         relevance_fuel: u64,
     ) -> Result<Self> {

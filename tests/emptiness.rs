@@ -40,7 +40,7 @@ fn is_contained_in_prefixes_except(small: &str, big: &str, except: &str) -> bool
 
     let big = bld.mk(&big).unwrap();
     let small = bld.mk_regex(small).unwrap();
-    Regex::is_contained_in_prefixes(bld.exprset(), small, big, REL_FUEL).unwrap()
+    Regex::is_contained_in_prefixes(bld.exprset().clone(), small, big, REL_FUEL).unwrap()
 }
 
 fn check_empty(a: &str, b: &str) {

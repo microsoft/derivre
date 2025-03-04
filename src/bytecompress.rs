@@ -31,7 +31,7 @@ impl ByteCompressor {
         }
     }
 
-    pub fn compress(&mut self, exprset: &ExprSet, rx_list: &[ExprRef]) -> (ExprSet, Vec<ExprRef>) {
+    pub fn compress(&mut self, exprset: ExprSet, rx_list: &[ExprRef]) -> (ExprSet, Vec<ExprRef>) {
         self.mapping = vec![INVALID_MAPPING; exprset.alphabet_size];
 
         let mut todo = rx_list.to_vec();
@@ -74,7 +74,7 @@ impl ByteCompressor {
             );
         }
 
-        let mut trg = exprset.clone();
+        let mut trg = exprset;
 
         // this disables Or->Trie conversion; the input should be already optimized this way
         trg.disable_optimizations();
