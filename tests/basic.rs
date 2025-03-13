@@ -407,10 +407,10 @@ fn test_json_uxxxx() {
     let mut rx = b.to_regex(e);
     for x in 0..=0xffff {
         for s in &[format!("\\u{:04X}", x), format!("\\u{:04x}", x)] {
-            if x == 0x007f || (0x0000 <= x && x <= 0x001f && x != 0x000a) {
-                match_(&mut rx, &s);
+            if x == 0x007f || ((0x0000..=0x001f).contains(&x) && x != 0x000a) {
+                match_(&mut rx, s);
             } else {
-                no_match(&mut rx, &s);
+                no_match(&mut rx, s);
             }
         }
     }

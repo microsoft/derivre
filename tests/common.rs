@@ -59,6 +59,12 @@ pub struct RegexTests {
     seen: HashSet<String>,
 }
 
+impl Default for RegexTests {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RegexTests {
     /// Create a new empty collection of glob tests.
     pub fn new() -> RegexTests {
@@ -71,10 +77,10 @@ impl RegexTests {
     /// Load all of the TOML encoded tests in `data` into this collection.
     /// The given group name is assigned to all loaded tests.
     pub fn load_slice(&mut self, group_name: &str, data: &[u8]) -> Result<()> {
-        let data = std::str::from_utf8(&data)
+        let data = std::str::from_utf8(data)
             .with_context(|| format!("data in {} is not valid UTF-8", group_name))?;
         let mut index = 1;
-        let mut tests: RegexTests = toml::from_str(&data)
+        let mut tests: RegexTests = toml::from_str(data)
             .with_context(|| format!("error decoding TOML for '{}'", group_name))?;
         for t in &mut tests.tests {
             t.group = group_name.to_string();

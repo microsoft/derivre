@@ -52,8 +52,8 @@ fn main() {
     let mut rx = Regex::new("[abx]*(?P<stop>[xq]*y)").unwrap();
     assert!(rx.lookahead_len("axxxxxxxy") == Some(1));
     assert!(rx.lookahead_len("axxxxxxxqqqy") == Some(4));
-    assert!(rx.lookahead_len("axxxxxxxqqq") == None);
-    assert!(rx.lookahead_len("ccqy") == None);
+    assert!(rx.lookahead_len("axxxxxxxqqq").is_none());
+    assert!(rx.lookahead_len("ccqy").is_none());
 
     let mut rx = Regex::new("a[bc](de|fg)").unwrap();
     no_match(&mut rx, "abd");

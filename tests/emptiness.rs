@@ -161,15 +161,15 @@ fn test_contains() {
 
     let json_str = r#"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\x00-\x1F\x7F])*"#;
 
-    check_contains(r"[a-z]+", &json_str);
-    check_contains(r"[a-z\u{0080}-\u{FFFF}]+", &json_str);
-    check_contains(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", &json_str);
-    check_contains(r" [a-zA-Z\u{0080}-\u{10FFFF}]*", &json_str);
+    check_contains(r"[a-z]+", json_str);
+    check_contains(r"[a-z\u{0080}-\u{FFFF}]+", json_str);
+    check_contains(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", json_str);
+    check_contains(r" [a-zA-Z\u{0080}-\u{10FFFF}]*", json_str);
 
-    check_not_contains(r"[\\a-z\u{0080}-\u{FFFF}]+", &json_str);
-    check_not_contains(r#"["a-z\u{0080}-\u{FFFF}]+"#, &json_str);
-    check_not_contains(r#"[\na-z\u{0080}-\u{FFFF}]+"#, &json_str);
-    check_not_contains(r"[\\a-z]+", &json_str);
+    check_not_contains(r"[\\a-z\u{0080}-\u{FFFF}]+", json_str);
+    check_not_contains(r#"["a-z\u{0080}-\u{FFFF}]+"#, json_str);
+    check_not_contains(r#"[\na-z\u{0080}-\u{FFFF}]+"#, json_str);
+    check_not_contains(r"[\\a-z]+", json_str);
 
     check_contains(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}");
     check_contains(r"[B]*B[Bb]", r"[BC]*B[Bb]");
@@ -185,7 +185,7 @@ fn test_contains() {
     assert!(r.is_err());
 
     let r = RegexBuilder::new().is_contained_in(r".*A.{8}", r".*[AB].{8}", 5_000_000);
-    assert!(r.unwrap() == true);
+    assert!(r.unwrap());
 }
 
 #[test]
@@ -196,24 +196,24 @@ fn test_prefixes_normal() {
     //check_contains_prefixes(r"a", r"aB");
     check_contains_prefixes(r"[a-z]+", r"[a-z]+BBB");
 
-    check_contains_prefixes(r"[a-z]+", &json_str);
-    check_contains_prefixes(r"[a-z\u{0080}-\u{FFFF}]+", &json_str);
-    check_contains_prefixes(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", &json_str);
-    check_contains_prefixes(r" [a-zA-Z\u{0080}-\u{10FFFF}]*", &json_str);
-    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", &json_str);
-    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", &json_str);
-    check_not_contains_prefixes(r#"["a-z\u{0080}-\u{FFFF}]+"#, &json_str);
-    check_not_contains_prefixes(r#"[\na-z\u{0080}-\u{FFFF}]+"#, &json_str);
-    check_not_contains_prefixes(r"[\\a-z]+", &json_str);
+    check_contains_prefixes(r"[a-z]+", json_str);
+    check_contains_prefixes(r"[a-z\u{0080}-\u{FFFF}]+", json_str);
+    check_contains_prefixes(r"[a-zA-Z\u{0080}-\u{10FFFF}]+", json_str);
+    check_contains_prefixes(r" [a-zA-Z\u{0080}-\u{10FFFF}]*", json_str);
+    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", json_str);
+    check_not_contains_prefixes(r"[\\a-z\u{0080}-\u{FFFF}]+", json_str);
+    check_not_contains_prefixes(r#"["a-z\u{0080}-\u{FFFF}]+"#, json_str);
+    check_not_contains_prefixes(r#"[\na-z\u{0080}-\u{FFFF}]+"#, json_str);
+    check_not_contains_prefixes(r"[\\a-z]+", json_str);
     // check_contains_prefixes(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}X");
     // check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]X");
     // check_contains_prefixes(r"[Bb]*B[Bb]{4}", r"[BQb]*B[Bb]{4}");
     // check_contains_prefixes(r"[B]*B[Bb]", r"[BC]*B[Bb]");
 
-    check_contains_prefixes(r"[a-z]+", &json_str);
+    check_contains_prefixes(r"[a-z]+", json_str);
 
     check_contains_prefixes_except(r"[abc]+", "[abcd]+Q", r#"aQ"#);
-    check_contains_prefixes_except(r"[a-z]+", &json_str, r#"(foo|bar)""#);
+    check_contains_prefixes_except(r"[a-z]+", json_str, r#"(foo|bar)""#);
 }
 
 #[test]

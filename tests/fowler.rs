@@ -19,7 +19,7 @@ fn suite() -> Result<RegexTests> {
 
 #[test]
 fn test_fowler() {
-    let disabled = vec![3, 18, 20, 21, 22, 23, 90, 91, 92, 110, 140, 141];
+    let disabled = [3, 18, 20, 21, 22, 23, 90, 91, 92, 110, 140, 141];
     let disabled: HashSet<_> = disabled
         .iter()
         .map(|n| format!("fowler-basic/basic{}", n))
