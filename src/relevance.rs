@@ -448,18 +448,22 @@ impl RelevanceCache {
                     return self.is_non_empty_inner(exprs, inner);
                 }
             }
-            Expr::And(_, &[e0, e1]) => if let (Expr::Repeat(_, e0, min0, max0), Expr::Repeat(_, e1, min1, max1)) = (exprs.get(e0), exprs.get(e1)) {
-                let min2 = std::cmp::max(min0, min1);
-                let max2 = std::cmp::min(max0, max1);
-                if min2 <= max2 {
-                    // ranges intersect
-                    let e2 = exprs.mk_and(&mut vec![e0, e1]);
-                    if let Ok(true) = self.is_non_empty_inner(exprs, e2) {
-                        self.relevance_cache.insert(top_expr, true);
-                        return Ok(true);
+            Expr::And(_, &[e0, e1]) => {
+                if let (Expr::Repeat(_, e0, min0, max0), Expr::Repeat(_, e1, min1, max1)) =
+                    (exprs.get(e0), exprs.get(e1))
+                {
+                    let min2 = std::cmp::max(min0, min1);
+                    let max2 = std::cmp::min(max0, max1);
+                    if min2 <= max2 {
+                        // ranges intersect
+                        let e2 = exprs.mk_and(&mut vec![e0, e1]);
+                        if let Ok(true) = self.is_non_empty_inner(exprs, e2) {
+                            self.relevance_cache.insert(top_expr, true);
+                            return Ok(true);
+                        }
                     }
                 }
-            },
+            }
             _ => {}
         }
 

@@ -679,7 +679,9 @@ impl ExprSet {
             ExprRef::ANY_BYTE_STRING
         } else {
             let n = self.get(e);
-            if let Expr::Not(_, e2) = n { return e2 }
+            if let Expr::Not(_, e2) = n {
+                return e2;
+            }
             let nullable_positive = !n.nullable();
             let flags = ExprFlags::from_nullable_positive(nullable_positive, nullable_positive);
             self.mk(Expr::Not(flags, e))
