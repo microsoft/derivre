@@ -169,7 +169,7 @@ impl RegexAst {
                 break;
             }
             if ast.is_none() {
-                dst.push_str(")");
+                dst.push(')');
                 continue;
             }
             let ast = ast.unwrap();
@@ -183,13 +183,13 @@ impl RegexAst {
                 | RegexAst::LookAhead(_)
                 | RegexAst::Not(_) => {}
                 RegexAst::Byte(b) => {
-                    dst.push_str(" ");
+                    dst.push(' ');
                     dst.push_str(&byte_to_string(*b));
                 }
                 RegexAst::ByteSet(bs) => {
-                    dst.push_str(" ");
+                    dst.push(' ');
                     if bs.len() == 256 / 32 {
-                        dst.push_str(&byteset_to_string(&bs));
+                        dst.push_str(&byteset_to_string(bs));
                     } else {
                         dst.push_str(&format!("invalid byteset len: {}", bs.len()))
                     }
@@ -198,7 +198,7 @@ impl RegexAst {
                     dst.push_str(&format!(" {:?}", s));
                 }
                 RegexAst::ByteLiteral(s) => {
-                    dst.push_str(&format!(" {:?}", String::from_utf8_lossy(&s)));
+                    dst.push_str(&format!(" {:?}", String::from_utf8_lossy(s)));
                 }
                 RegexAst::ExprRef(r) => {
                     if let Some(es) = exprset {
@@ -235,6 +235,12 @@ impl Debug for RegexAst {
         let mut s = String::new();
         self.write_to_str(&mut s, 512, None);
         write!(f, "{}", s)
+    }
+}
+
+impl Default for RegexBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -353,7 +359,7 @@ impl RegexBuilder {
             let upref = exprset.mk_literal("u00");
             let backslash = exprset.mk_byte(b'\\');
 
-            let quoted = if bs[0] == (0xffff_ffff & !(1 << b'\n')) {
+            let quoted = if bs[0] == !(1 << b'\n') {
                 // everything except for \n
                 quote_all_ctrl(exprset, false, options)
             } else if bs[0] == 0xffff_ffff {
@@ -420,10 +426,7 @@ impl RegexBuilder {
         }
 
         fn byte_needs_quote(b: u8) -> bool {
-            match b {
-                b'\\' | b'"' | 0x7F | 0..0x20 => true,
-                _ => false,
-            }
+            matches!(b, b'\\' | b'"' | 0x7F | 0..0x20)
         }
 
         let r = self.exprset.map(
@@ -436,12 +439,12 @@ impl RegexBuilder {
                     Expr::ByteSet(bs) => {
                         let has_bytes_below_0x20 = bs[0] != 0;
                         if has_bytes_below_0x20
-                            || byteset_contains(&bs, b'\\' as usize)
-                            || byteset_contains(&bs, b'"' as usize)
-                            || byteset_contains(&bs, 0x7F)
+                            || byteset_contains(bs, b'\\' as usize)
+                            || byteset_contains(bs, b'"' as usize)
+                            || byteset_contains(bs, 0x7F)
                         {
                             let bs = bs.to_vec();
-                            quote_byteset(exprset, bs, &options)
+                            quote_byteset(exprset, bs, options)
                         } else {
                             // no need to quote
                             e
@@ -449,7 +452,7 @@ impl RegexBuilder {
                     }
                     Expr::Byte(b) => {
                         if byte_needs_quote(b) {
-                            quote_byteset(exprset, byteset_from_range(b, b), &options)
+                            quote_byteset(exprset, byteset_from_range(b, b), options)
                         } else {
                             // no need to quote
                             e
@@ -466,24 +469,23 @@ impl RegexBuilder {
                                     idx += 1;
                                 }
                                 let slice = &bytes[idx0..idx];
-                                if slice.len() > 0 {
+                                if !slice.is_empty() {
                                     ConcatElement::Bytes(slice).push_owned_to(&mut acc);
                                 }
                                 if idx < bytes.len() {
                                     let b = bytes[idx];
                                     let q =
-                                        quote_byteset(exprset, byteset_from_range(b, b), &options);
+                                        quote_byteset(exprset, byteset_from_range(b, b), options);
                                     ConcatElement::Expr(q).push_owned_to(&mut acc);
                                     idx += 1;
                                 }
                             }
                             exprset._mk_concat_vec(acc)
+                        } else if args[0] == args0 {
+                            e
                         } else {
-                            if args[0] == args0 {
-                                e
-                            } else {
-                                exprset.mk_byte_concat(&bytes.to_vec(), args[0])
-                            }
+                            let copy = bytes.to_vec();
+                            exprset.mk_byte_concat(&copy, args[0])
                         }
                     }
                     // always identity
@@ -524,14 +526,14 @@ impl RegexBuilder {
     }
 
     pub fn mk_contained_in(&mut self, small: &str, big: &str) -> Result<ExprRef> {
-        let a = RegexAst::ExprRef(self.mk_regex(&small)?);
-        let b = RegexAst::ExprRef(self.mk_regex(&big)?);
+        let a = RegexAst::ExprRef(self.mk_regex(small)?);
+        let b = RegexAst::ExprRef(self.mk_regex(big)?);
         self.mk(&a.contained_in(&b))
     }
 
     pub fn mk_contained_in_ast(&mut self, small: &RegexAst, big: &RegexAst) -> Result<ExprRef> {
-        let a = RegexAst::ExprRef(self.mk(&small)?);
-        let b = RegexAst::ExprRef(self.mk(&big)?);
+        let a = RegexAst::ExprRef(self.mk(small)?);
+        let b = RegexAst::ExprRef(self.mk(big)?);
         self.mk(&a.contained_in(&b))
     }
 

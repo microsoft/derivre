@@ -169,8 +169,8 @@ impl ExprSet {
             lookahead.sort_by_key(|&(_, e, n)| (e.0, n));
 
             let mut prev = ExprRef::INVALID;
-            for idx in 0..lookahead.len() {
-                let (l, inner, _) = lookahead[idx];
+            for ll in lookahead.iter() {
+                let (l, inner, _) = *ll;
                 if inner == prev {
                     continue;
                 }
@@ -181,7 +181,7 @@ impl ExprSet {
             args.sort_unstable();
         }
 
-        if args.len() == 0 {
+        if args.is_empty() {
             ExprRef::NO_MATCH
         } else if args.len() == 1 {
             args[0]
@@ -190,13 +190,13 @@ impl ExprSet {
             if self.optimize {
                 self.or_optimized(flags, args)
             } else {
-                self.mk(Expr::Or(flags, &args))
+                self.mk(Expr::Or(flags, args))
             }
         }
     }
 
-    fn or_optimized(&mut self, flags: ExprFlags, args: &mut Vec<ExprRef>) -> ExprRef {
-        let args0 = args.clone();
+    fn or_optimized(&mut self, flags: ExprFlags, args: &mut [ExprRef]) -> ExprRef {
+        let args0 = args.to_vec();
 
         args.sort_unstable_by(|&a, &b| self.iter_concat_bytes(a).cmp(self.iter_concat_bytes(b)));
 
@@ -230,7 +230,7 @@ impl ExprSet {
         let mut prev = None;
         let mut has_double = false;
         for c in branches.iter() {
-            let c0 = c.0.get(0);
+            let c0 = c.0.first();
             if c0 == prev {
                 has_double = true;
                 break;
@@ -296,12 +296,12 @@ impl ExprSet {
             a.push_owned_to(&mut common);
 
             // assert!(a != ExprRef::EMPTY_STRING);
-            for idx in 1..last_idx {
-                let a = args[idx].next(self).unwrap();
+            for arg in &mut args[1..last_idx] {
+                let a = arg.next(self).unwrap();
                 assert!(a == b);
             }
         }
-        assert!(depth == 0 || common.len() > 0);
+        assert!(depth == 0 || !common.is_empty());
 
         let mut idx = 0;
 
@@ -523,7 +523,7 @@ impl ExprSet {
         }
         args.truncate(dp);
 
-        if args.len() == 0 {
+        if args.is_empty() {
             ExprRef::ANY_BYTE_STRING
         } else if args.len() == 1 {
             args[0]
@@ -536,7 +536,7 @@ impl ExprSet {
         } else {
             let positive = nullable; // if all branches are nullable, then it's also positive
             let flags = ExprFlags::from_nullable_positive(nullable, positive);
-            self.mk(Expr::And(flags, &args))
+            self.mk(Expr::And(flags, args))
         }
     }
 
@@ -592,13 +592,13 @@ impl ExprSet {
                 OwnedConcatElement::Bytes(b) => self.mk_byte_literal(b),
             };
 
-            for arg in (&args[..len - 1]).iter().rev() {
+            for arg in args[..len - 1].iter().rev() {
                 match arg {
                     OwnedConcatElement::Expr(e) => {
                         r = self.mk_concat(*e, r);
                     }
                     OwnedConcatElement::Bytes(b) => {
-                        r = self.mk_byte_concat(&b, r);
+                        r = self.mk_byte_concat(b, r);
                     }
                 }
             }
@@ -640,7 +640,7 @@ impl ExprSet {
     }
 
     pub fn mk_byte_concat(&mut self, mut s: &[u8], mut tail: ExprRef) -> ExprRef {
-        if s.len() == 0 {
+        if s.is_empty() {
             return tail;
         }
         if s.len() == 1 && tail == ExprRef::EMPTY_STRING {
@@ -679,10 +679,7 @@ impl ExprSet {
             ExprRef::ANY_BYTE_STRING
         } else {
             let n = self.get(e);
-            match n {
-                Expr::Not(_, e2) => return e2,
-                _ => {}
-            }
+            if let Expr::Not(_, e2) = n { return e2 }
             let nullable_positive = !n.nullable();
             let flags = ExprFlags::from_nullable_positive(nullable_positive, nullable_positive);
             self.mk(Expr::Not(flags, e))
@@ -714,12 +711,12 @@ pub enum ConcatElement<'a> {
     Bytes(&'a [u8]),
 }
 
-impl<'a> ConcatElement<'a> {
+impl ConcatElement<'_> {
     pub fn push_owned_to(&self, out: &mut Vec<OwnedConcatElement>) -> bool {
         match self {
             ConcatElement::Bytes(bb) => match out.last_mut() {
                 Some(OwnedConcatElement::Bytes(ref mut exp)) => {
-                    exp.extend_from_slice(&bb);
+                    exp.extend_from_slice(bb);
                 }
                 _ => {
                     out.push(OwnedConcatElement::Bytes(bb.to_vec()));
@@ -782,7 +779,7 @@ pub struct ConcatByteIter<'a> {
     pointer: ConcatBytePointer,
 }
 
-impl<'a> Iterator for ConcatByteIter<'a> {
+impl Iterator for ConcatByteIter<'_> {
     type Item = ByteConcatElement;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -18,6 +18,12 @@ pub struct DerivCache {
     state_table: HashMap<(ExprRef, u8), ExprRef>,
 }
 
+impl Default for DerivCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DerivCache {
     pub fn new() -> Self {
         DerivCache {
@@ -70,7 +76,8 @@ impl DerivCache {
                     }
                     Expr::ByteConcat(_, bytes, tail) => {
                         if bytes[0] == b {
-                            exprs.mk_byte_concat(&bytes[1..].to_vec(), tail)
+                            let copy = bytes[1..].to_vec();
+                            exprs.mk_byte_concat(&copy, tail)
                         } else {
                             ExprRef::NO_MATCH
                         }

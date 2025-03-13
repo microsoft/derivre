@@ -150,7 +150,7 @@ impl PrettyPrinter {
         max_len: usize,
     ) -> std::fmt::Result {
         write!(f, "(")?;
-        for i in 0..ids.len() {
+        for (i, id) in ids.iter().enumerate() {
             if f.len() > max_len {
                 write!(f, "…")?;
                 break;
@@ -158,7 +158,7 @@ impl PrettyPrinter {
             if i > 0 {
                 write!(f, "{}", sep)?;
             }
-            self.write_expr(exprset, ids[i], f, max_len)?;
+            self.write_expr(exprset, *id, f, max_len)?;
         }
         write!(f, ")")
     }
@@ -254,14 +254,10 @@ pub fn symbolset_to_string(s: &[u32], alpha_size: usize) -> String {
 }
 
 pub fn byte_to_string(b: u8) -> String {
-    if b < 0x20 || b >= 0x7f {
+    if !(0x20..0x7f).contains(&b) {
         format!("{:02X}", b)
     } else {
-        let b = b as char;
-        match b {
-            // '_' | 'a'..='z' | 'A'..='Z' | '0'..='9' => format!("{}", b),
-            _ => format!("{:?}", b as char),
-        }
+        format!("{:?}", b as char)
     }
 }
 

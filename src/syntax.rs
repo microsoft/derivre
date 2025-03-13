@@ -72,7 +72,7 @@ impl TrieNode {
         let tail = self.build_tail(set);
         let head = match &self.selector {
             TrieSelector::Byte(b) => set.mk_byte(*b),
-            TrieSelector::ByteSet(bs) => set.mk_byte_set(&bs),
+            TrieSelector::ByteSet(bs) => set.mk_byte_set(bs),
         };
         set.mk_concat(head, tail)
     }
@@ -117,7 +117,7 @@ impl ExprSet {
         r
     }
 
-    fn from_ast(&mut self, ast: &Hir) -> Result<ExprRef> {
+    fn mk_from_ast(&mut self, ast: &Hir) -> Result<ExprRef> {
         let mut todo = vec![StackEntry {
             ast,
             args: Vec::new(),
@@ -129,7 +129,7 @@ impl ExprSet {
         while let Some(mut node) = todo.pop() {
             let subs = node.ast.kind().subs();
             if subs.len() != node.args.len() {
-                assert!(node.args.len() == 0);
+                assert!(node.args.is_empty());
                 node.args = subs.iter().map(|_| ExprRef::INVALID).collect();
                 let result_stack_idx = todo.len();
                 let is_concat = matches!(node.ast.kind(), HirKind::Concat(_));
@@ -191,7 +191,7 @@ impl ExprSet {
                 }
                 HirKind::Concat(args) => {
                     assert!(args.len() == node.args.len());
-                    self.mk_concat_vec(&mut node.args)
+                    self.mk_concat_vec(&node.args)
                 }
                 HirKind::Alternation(args) => {
                     assert!(args.len() == node.args.len());
@@ -210,7 +210,7 @@ impl ExprSet {
 
     pub fn parse_expr(&mut self, mut parser: Parser, rx: &str) -> Result<ExprRef> {
         let hir = parser.parse(rx)?;
-        self.from_ast(&hir)
+        self.mk_from_ast(&hir)
             .map_err(|e| anyhow::anyhow!("{} in regex {:?}", e, rx))
     }
 }

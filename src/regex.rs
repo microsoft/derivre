@@ -122,7 +122,7 @@ impl Regex {
     pub fn new_with_parser(parser: regex_syntax::Parser, rx: &str) -> Result<Self> {
         let mut exprset = ExprSet::new(256);
         let rx = exprset.parse_expr(parser.clone(), rx)?;
-        Ok(Self::new_with_exprset(exprset, rx, u64::MAX)?)
+        Self::new_with_exprset(exprset, rx, u64::MAX)
     }
 
     pub fn alpha(&self) -> &AlphabetInfo {
@@ -286,13 +286,11 @@ impl Regex {
     }
 
     pub fn print_state_table(&self) {
-        let mut state = 0;
-        for row in self.state_table.chunks(self.alpha.len()) {
+        for (state, row) in self.state_table.chunks(self.alpha.len()).enumerate() {
             println!("state: {}", state);
             for (b, &new_state) in row.iter().enumerate() {
                 println!("  s{:?} -> {:?}", b, new_state);
             }
-            state += 1;
         }
     }
 }
@@ -364,6 +362,11 @@ impl AlphabetInfo {
         self.size
     }
 
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+
     pub fn has_error(&self) -> bool {
         self.size == 0
     }
@@ -427,7 +430,7 @@ impl Regex {
         slf.append_state(desc);
         // in fact, transition from MISSING and DEAD should both lead to DEAD
         slf.state_table.fill(StateID::DEAD);
-        assert!(slf.alpha.len() > 0);
+        assert!(!slf.alpha.is_empty());
 
         (slf, rx_list)
     }
@@ -475,12 +478,10 @@ impl Regex {
         let d = self.deriv.derivative(&mut self.exprs, e, b);
         if d == ExprRef::NO_MATCH {
             StateID::DEAD
+        } else if self.relevance.is_non_empty(&mut self.exprs, d) {
+            self.insert_state(d)
         } else {
-            if self.relevance.is_non_empty(&mut self.exprs, d) {
-                self.insert_state(d)
-            } else {
-                StateID::DEAD
-            }
+            StateID::DEAD
         }
     }
 }

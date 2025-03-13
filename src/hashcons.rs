@@ -29,6 +29,12 @@ pub struct VecHashCons {
     curr_elt: Element,
 }
 
+impl Default for VecHashCons {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VecHashCons {
     /// Create a new hashcons.
     pub fn new() -> Self {
@@ -67,6 +73,10 @@ impl VecHashCons {
     /// Return number of elements in the hashcons (also largest unique id + 1).
     pub fn len(&self) -> usize {
         self.elements.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
     }
 
     /// Estimate number of bytes used by the hashcons.

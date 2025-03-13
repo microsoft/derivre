@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::hash::Hash;
 
 use crate::HashMap;
@@ -96,12 +97,15 @@ impl ByteCompressor {
                         set_true(&mut v, idx);
                     }
                 }
-                if byte_mapping.contains_key(&v) {
-                    self.mapping[b] = *byte_mapping.get(&v).unwrap();
-                } else {
-                    self.mapping[b] = self.alphabet_size as u8;
-                    self.alphabet_size += 1;
-                    byte_mapping.insert(v, self.mapping[b as usize]);
+                match byte_mapping.entry(v) {
+                    Entry::Occupied(e) => {
+                        self.mapping[b] = *e.get();
+                    }
+                    Entry::Vacant(e) => {
+                        self.mapping[b] = self.alphabet_size as u8;
+                        self.alphabet_size += 1;
+                        e.insert(self.mapping[b]);
+                    }
                 }
             }
         }

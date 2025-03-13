@@ -38,9 +38,9 @@ pub struct RelevanceCache {
     cost_limit: u64,
 }
 
-fn swap_each<A: Copy>(v: &mut Vec<(A, A)>) {
-    for i in 0..v.len() {
-        v[i] = (v[i].1, v[i].0);
+fn swap_each<A: Copy>(v: &mut [(A, A)]) {
+    for elem in v.iter_mut() {
+        *elem = (elem.1, elem.0);
     }
 }
 
@@ -71,7 +71,7 @@ fn simplify(exprs: &mut ExprSet, s: SymRes) -> SymRes {
     exprs.pay(s.len());
     let mut s = group_by_first(s, |args| exprs.mk_or(args));
     swap_each(&mut s);
-    let mut s = group_by_first(s, |args| exprs.mk_byte_set_or(&args));
+    let mut s = group_by_first(s, |args| exprs.mk_byte_set_or(args));
     swap_each(&mut s);
     s
 }
@@ -121,6 +121,12 @@ fn make_disjoint(exprs: &mut ExprSet, inp: &SymRes) -> SymRes {
     }
 
     res
+}
+
+impl Default for RelevanceCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RelevanceCache {
@@ -296,7 +302,7 @@ impl RelevanceCache {
         }
         let not_big = exprs.mk_not(big);
         let cont = exprs.mk_and2(small, not_big);
-        Ok(self.is_non_empty_inner(exprs, cont)? == false)
+        Ok(!(self.is_non_empty_inner(exprs, cont)?))
     }
 
     fn is_contained_in_prefixes_inner(
@@ -442,20 +448,17 @@ impl RelevanceCache {
                     return self.is_non_empty_inner(exprs, inner);
                 }
             }
-            Expr::And(_, &[e0, e1]) => match (exprs.get(e0), exprs.get(e1)) {
-                (Expr::Repeat(_, e0, min0, max0), Expr::Repeat(_, e1, min1, max1)) => {
-                    let min2 = std::cmp::max(min0, min1);
-                    let max2 = std::cmp::min(max0, max1);
-                    if min2 <= max2 {
-                        // ranges intersect
-                        let e2 = exprs.mk_and(&mut vec![e0, e1]);
-                        if let Ok(true) = self.is_non_empty_inner(exprs, e2) {
-                            self.relevance_cache.insert(top_expr, true);
-                            return Ok(true);
-                        }
+            Expr::And(_, &[e0, e1]) => if let (Expr::Repeat(_, e0, min0, max0), Expr::Repeat(_, e1, min1, max1)) = (exprs.get(e0), exprs.get(e1)) {
+                let min2 = std::cmp::max(min0, min1);
+                let max2 = std::cmp::min(max0, max1);
+                if min2 <= max2 {
+                    // ranges intersect
+                    let e2 = exprs.mk_and(&mut vec![e0, e1]);
+                    if let Ok(true) = self.is_non_empty_inner(exprs, e2) {
+                        self.relevance_cache.insert(top_expr, true);
+                        return Ok(true);
                     }
                 }
-                _ => {}
             },
             _ => {}
         }
@@ -492,13 +495,13 @@ impl RelevanceCache {
                                 mark_relevant.extend_from_slice(lst);
                             }
                         }
-                        assert!(self.relevance_cache[&top_expr] == true);
+                        assert!(self.relevance_cache[&top_expr]);
                         debug!("relevant: {:?}", top_expr);
                         // println!("cost: {}", exprs.cost() - c0);
                         return Ok(true);
                     }
 
-                    makes_relevant.entry(r).or_insert_with(Vec::new).push(*e);
+                    makes_relevant.entry(r).or_default().push(*e);
 
                     if !pending.contains(&r) {
                         // println!("  add {}", exprs.expr_to_string(r));
@@ -516,7 +519,7 @@ impl RelevanceCache {
                 for e in pending {
                     self.relevance_cache.insert(e, false);
                 }
-                assert!(self.relevance_cache[&top_expr] == false);
+                assert!(!self.relevance_cache[&top_expr]);
                 // println!("cost: {}", exprs.cost() - c0);
                 return Ok(false);
             }

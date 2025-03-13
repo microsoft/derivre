@@ -18,8 +18,8 @@ pub(crate) fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
                 for (idx, &w) in lst.iter().enumerate() {
                     if w > 0 {
                         let b = (idx as u32 * 32 + w.trailing_zeros()) as u8;
-                        if b0.is_some() {
-                            break 'dfs NextByte::SomeBytes2([b0.unwrap(), b]);
+                        if let Some(b1) = b0 {
+                            break 'dfs NextByte::SomeBytes2([b1, b]);
                         } else {
                             b0 = Some(b);
                         }
@@ -63,6 +63,12 @@ pub(crate) fn next_byte_simple(exprs: &ExprSet, mut r: ExprRef) -> NextByte {
         res.make_fuzzy()
     } else {
         res
+    }
+}
+
+impl Default for NextByteCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

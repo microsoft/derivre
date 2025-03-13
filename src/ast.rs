@@ -97,12 +97,10 @@ impl ExprFlags {
         if nullable {
             // anything nullable is also positive
             Self::POSITIVE_NULLABLE
+        } else if positive {
+            Self::POSITIVE
         } else {
-            if positive {
-                Self::POSITIVE
-            } else {
-                Self::ZERO
-            }
+            Self::ZERO
         }
     }
 
@@ -426,7 +424,7 @@ impl ExprSet {
     }
 
     pub fn expr_to_string_max_len(&self, id: ExprRef, max_len: usize) -> String {
-        self.pp.expr_to_string(&self, id, max_len)
+        self.pp.expr_to_string(self, id, max_len)
     }
 
     pub fn expr_to_string(&self, id: ExprRef) -> String {
@@ -439,9 +437,12 @@ impl ExprSet {
         r
     }
 
-    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.exprs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.exprs.is_empty()
     }
 
     pub fn num_bytes(&self) -> usize {
@@ -659,10 +660,10 @@ impl NextByte {
     }
 
     pub fn is_some_bytes(&self) -> bool {
-        match self {
-            NextByte::SomeBytes0 | NextByte::SomeBytes1(_) | NextByte::SomeBytes2(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            NextByte::SomeBytes0 | NextByte::SomeBytes1(_) | NextByte::SomeBytes2(_)
+        )
     }
 
     pub fn some_bytes_from_slice(s: &[u8]) -> Self {
@@ -677,7 +678,7 @@ impl NextByte {
         match self {
             NextByte::ForcedByte(a) => NextByte::SomeBytes1(*a),
             NextByte::ForcedEOI => NextByte::SomeBytes0,
-            _ => self.clone(),
+            _ => *self,
         }
     }
 }
