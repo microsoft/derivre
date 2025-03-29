@@ -1,5 +1,6 @@
 use crate::{HashMap, HashSet};
 use anyhow::Result;
+use std::hash::Hash;
 
 use crate::{
     ast::{Expr, ExprRef, ExprSet},
@@ -44,30 +45,57 @@ fn swap_each<A: Copy>(v: &mut [(A, A)]) {
     }
 }
 
-fn group_by_first<A: PartialEq + Ord + Copy, B: Ord + Copy>(
-    mut s: Vec<(A, B)>,
+fn group_by_first<A: PartialEq + Ord + Copy + Hash, B: Ord + Copy>(
+    s: Vec<(A, B)>,
     mut f: impl FnMut(&mut Vec<B>) -> B,
 ) -> Vec<(A, B)> {
-    s.sort_unstable();
-    let mut by_set = vec![];
-    let mut i = 0;
-    while i < s.len() {
-        let mut j = i + 1;
-        while j < s.len() && s[i].0 == s[j].0 {
-            j += 1;
-        }
-        let len = j - i;
-        if len == 1 {
-            by_set.push(s[i]);
+    let mut first_idx: HashMap<A, usize> = HashMap::default();
+    let mut by_set: Vec<(A, Vec<B>)> = vec![];
+    let mut dupl = false;
+
+    for (a, _) in &s {
+        if first_idx.contains_key(a) {
+            dupl = true;
         } else {
-            by_set.push((s[i].0, f(&mut s[i..j].iter().map(|(_, x)| *x).collect())))
+            first_idx.insert(*a, by_set.len());
         }
-        i = j;
     }
+
+    if !dupl {
+        return s;
+    }
+
+    first_idx.clear();
+    for (a, b) in &s {
+        if let Some(idx) = first_idx.get(a) {
+            by_set[*idx].1.push(*b);
+        } else {
+            first_idx.insert(*a, by_set.len());
+            by_set.push((*a, vec![*b]));
+        }
+    }
+
     by_set
+        .into_iter()
+        .map(|(a, mut bs)| {
+            if bs.len() == 1 {
+                (a, bs[0])
+            } else {
+                (a, f(&mut bs))
+            }
+        })
+        .collect()
 }
 
 fn simplify(exprs: &mut ExprSet, s: SymRes) -> SymRes {
+    if s.len() <= 1 {
+        return s;
+    }
+
+    if s.len() == 2 && s[0].0 != s[1].0 {
+        return s;
+    }
+
     exprs.pay(s.len());
     let mut s = group_by_first(s, |args| exprs.mk_or(args));
     swap_each(&mut s);
@@ -268,7 +296,8 @@ impl RelevanceCache {
                             .map(|(b, r)| (*b, exprs.mk_concat(*r, bb)))
                             .collect();
                         if exprs.is_nullable(aa) {
-                            or_branches.extend_from_slice(&deriv[1]);
+                            // prepend, so for pattern .*X this will focus first on X
+                            or_branches.splice(0..0, deriv[1].iter().copied());
                         }
                         simplify(exprs, or_branches)
                     }
@@ -542,6 +571,8 @@ impl RelevanceCache {
             if !f.children.is_empty() {
                 stack.push(f);
             }
+
+            debug!("  push: {}", exprs.expr_to_string(curr_node));
 
             anyhow::ensure!(
                 exprs.cost() <= self.cost_limit,

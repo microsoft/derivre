@@ -238,6 +238,13 @@ fn test_emptiness_repeats() {
     let lim = 10000;
     let json = true;
 
+    check_non_empty_limited(
+        "[A-Z0-9]*([RD][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][XYZ])[A-Z0-9]*",
+        "(?s:.{0,36})",
+        json,
+        lim,
+    );
+
     check_non_empty_limited("([\\+\\w-]{5,96})", "(?s:.{5,96})", json, lim);
     check_non_empty_limited("([\\w\\-]+)", "(?s:.{8,256})", json, lim);
     check_non_empty_limited("([\\+\\w-]{50,})", "(?s:.{3,50})", json, lim);
