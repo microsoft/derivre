@@ -176,6 +176,13 @@ impl PrettyPrinter {
         // } else if exprset.is_positive(id) {
         //     write!(f, "%")?;
         // }
+        // these two gets huge expressions otherwise due to UTF8
+        if id == exprset.any_unicode {
+            return write!(f, "_");
+        }
+        if id == exprset.any_unicode_non_nl {
+            return write!(f, ".");
+        }
         match e {
             Expr::EmptyString => write!(f, "ε"),
             Expr::NoMatch => write!(f, "∅"),
