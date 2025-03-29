@@ -228,20 +228,7 @@ impl RelevanceCache {
                         }
                         result
                     }
-                    Expr::And(_, src) => {
-                        let mut indices: Vec<usize> = (0..src.len()).collect();
-                        // make sure Concat exprs go at the end, so that they
-                        // are taken first in the loop below -
-                        // concats are the only ones that have the list prioritized,
-                        // so we want that prioritization to carry over to the result of and
-                        indices.sort_by_key(|i| match exprs.get(src[*i]) {
-                            Expr::Concat(_, _) => (1, e),
-                            _ => (0, e),
-                        });
-                        let mut deriv: Vec<_> = indices
-                            .into_iter()
-                            .map(|i| std::mem::take(&mut deriv[i]))
-                            .collect();
+                    Expr::And(_, _) => {
                         let mut acc = deriv.pop().unwrap();
                         while let Some(other) = deriv.pop() {
                             let mut new_acc = vec![];
@@ -309,8 +296,7 @@ impl RelevanceCache {
                             .map(|(b, r)| (*b, exprs.mk_concat(*r, bb)))
                             .collect();
                         if exprs.is_nullable(aa) {
-                            // prepend, so for pattern .*X this will focus first on X
-                            or_branches.splice(0..0, deriv[1].iter().copied());
+                            or_branches.extend_from_slice(&deriv[1]);
                         }
                         simplify(exprs, or_branches)
                     }
