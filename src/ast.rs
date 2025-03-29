@@ -335,6 +335,7 @@ impl<'a> Expr<'a> {
 #[derive(Clone)]
 pub struct ExprSet {
     exprs: VecHashCons,
+    expr_size: Vec<u32>,
     pub(crate) alphabet_size: usize,
     pub(crate) alphabet_words: usize,
     pub(crate) digits: [u8; 10],
@@ -353,6 +354,7 @@ impl ExprSet {
         let alphabet_words = (alphabet_size + 31) / 32;
         let mut r = ExprSet {
             exprs,
+            expr_size: vec![0],
             alphabet_size,
             alphabet_words,
             digits: [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'],
@@ -453,11 +455,36 @@ impl ExprSet {
         self.exprs.num_bytes()
     }
 
+    fn compute_size(&self, e: Expr) -> u32 {
+        match e {
+            Expr::EmptyString => 0,
+            Expr::NoMatch => 0,
+            Expr::Byte(_) => 1,
+            Expr::ByteSet(_) => 2,
+            Expr::RemainderIs { .. } => 100,
+            Expr::Lookahead(_, e, _) => self.get_size(e) + 1,
+            Expr::Not(_, e) => self.get_size(e) + 50,
+            Expr::Repeat(_, e, _, _) => self.get_size(e) + 10,
+            Expr::Concat(_, [a, b]) => self.get_size(a) + self.get_size(b) + 1,
+            Expr::Or(_, ee) => ee.iter().map(|e| self.get_size(*e)).sum(),
+            Expr::And(_, ee) => ee.iter().map(|e| self.get_size(*e)).sum::<u32>() + 20,
+            Expr::ByteConcat(_, items, e) => items.len() as u32 + self.get_size(e),
+        }
+    }
+
     // When called outside ctor, one should also call self.pay()
     pub(crate) fn mk(&mut self, e: Expr) -> ExprRef {
         self.exprs.start_insert();
         e.serialize(&mut self.exprs);
-        ExprRef(self.exprs.finish_insert())
+        let r = self.exprs.finish_insert();
+        if r as usize == self.expr_size.len() {
+            self.expr_size.push(self.compute_size(e))
+        }
+        ExprRef(r)
+    }
+
+    pub fn get_size(&self, id: ExprRef) -> u32 {
+        self.expr_size[id.0 as usize]
     }
 
     pub fn get(&self, id: ExprRef) -> Expr {

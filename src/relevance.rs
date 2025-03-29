@@ -228,7 +228,20 @@ impl RelevanceCache {
                         }
                         result
                     }
-                    Expr::And(_, _) => {
+                    Expr::And(_, src) => {
+                        let mut indices: Vec<usize> = (0..src.len()).collect();
+                        // make sure Concat exprs go at the end, so that they
+                        // are taken first in the loop below -
+                        // concats are the only ones that have the list prioritized,
+                        // so we want that prioritization to carry over to the result of and
+                        indices.sort_by_key(|i| match exprs.get(src[*i]) {
+                            Expr::Concat(_, _) => (1, e),
+                            _ => (0, e),
+                        });
+                        let mut deriv: Vec<_> = indices
+                            .into_iter()
+                            .map(|i| std::mem::take(&mut deriv[i]))
+                            .collect();
                         let mut acc = deriv.pop().unwrap();
                         while let Some(other) = deriv.pop() {
                             let mut new_acc = vec![];
@@ -559,7 +572,7 @@ impl RelevanceCache {
             exprs.pay(dr.len());
 
             visited.insert(curr_node);
-            let f = StackFrame {
+            let mut f = StackFrame {
                 expr: curr_node,
                 curr_idx: 0,
                 children: dr
@@ -568,11 +581,18 @@ impl RelevanceCache {
                     .filter(|e| !visited.contains(e))
                     .collect(),
             };
+
+            f.children
+                .sort_unstable_by_key(|&e| (exprs.get_size(e), e.0));
+
+            debug!("  push: {}", exprs.expr_to_string(curr_node));
+            for &c in &f.children {
+                debug!("    child: {}", exprs.expr_to_string(c));
+            }
+
             if !f.children.is_empty() {
                 stack.push(f);
             }
-
-            debug!("  push: {}", exprs.expr_to_string(curr_node));
 
             anyhow::ensure!(
                 exprs.cost() <= self.cost_limit,
