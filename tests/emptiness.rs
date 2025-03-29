@@ -235,13 +235,27 @@ fn test_prefixes_except() {
 
 #[test]
 fn test_emptiness_repeats() {
-    let lim = 10_000;
+    let lim = 10000;
     let json = true;
 
     check_non_empty_limited("([\\+\\w-]{5,96})", "(?s:.{5,96})", json, lim);
     check_non_empty_limited("([\\w\\-]+)", "(?s:.{8,256})", json, lim);
     check_non_empty_limited("([\\+\\w-]{50,})", "(?s:.{3,50})", json, lim);
     check_non_empty_limited("(([a-z0-9])+)", "(?s:.{10000,})", json, lim);
+
+    check_non_empty_limited(
+        ".*([RD][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][KMRASPDHEG]).*",
+        "(?s:.{0,36})",
+        json,
+        lim,
+    );
+
+    check_non_empty_limited(
+        ".*([RD][0-9]{30}[KMRASPDHEG]).*",
+        "(?s:.{0,36})",
+        json,
+        lim,
+    );
 
     check_empty_or_failing_limited("([abc]{5,96})", "(?s:[def]{5,96})", json, lim);
     check_empty_or_failing_limited("([\\+\\w-]{50,})", "(?s:.{3,30})", json, lim);

@@ -410,8 +410,11 @@ impl RelevanceCache {
         max_fuel: u64,
     ) -> Result<bool> {
         self.max_fuel = max_fuel;
-        self.cost_limit = exprs.cost().saturating_add(max_fuel);
-        self.is_non_empty_inner(exprs, top_expr)
+        let cost_0 = exprs.cost();
+        self.cost_limit = cost_0.saturating_add(max_fuel);
+        let r = self.is_non_empty_inner(exprs, top_expr);
+        // println!("cost: {}", exprs.cost() - cost_0);
+        r
     }
 
     fn is_non_empty_inner(&mut self, exprs: &mut ExprSet, top_expr: ExprRef) -> Result<bool> {
@@ -467,65 +470,77 @@ impl RelevanceCache {
             _ => {}
         }
 
-        // if A=>[B,C] is in makes_relevant, then if A is marked relevant, so should B and C
-        let mut makes_relevant: HashMap<ExprRef, Vec<ExprRef>> = HashMap::default();
-        let mut pending = HashSet::default();
-        let mut front_wave = vec![top_expr];
-        pending.insert(top_expr);
+        /*
+        DFS:
+            is_relevant(e)
+                if positive(e): return true
+                if C[e] is set: return C[e]
+                if pending[e]: return false
+
+                pending[e] = true
+                for (_, c) in sym_deriv(e)
+                    if is_relevant(c)
+                        C[e] := true
+                        return true
+                pending[e] = false
+                C[e] := false
+                return false
+        */
+
+        struct StackFrame {
+            expr: ExprRef,
+            curr_idx: usize,
+            children: Vec<ExprRef>,
+        }
+
+        let mut visited = HashSet::default();
+        let mut stack = vec![StackFrame {
+            expr: top_expr, // not true actually, but doesn't matter
+            curr_idx: 0,
+            children: vec![top_expr],
+        }];
 
         debug!("\nstart relevance: {}", exprs.expr_to_string(top_expr));
 
-        loop {
-            debug!("wave: {:?}", front_wave);
-            // println!("wave: {}", front_wave.len());
-            let mut new_wave = vec![];
-            for e in &front_wave {
-                let dr = self.deriv(exprs, *e);
-                exprs.pay(dr.len());
-                for (_, r) in dr {
-                    if exprs.is_positive(r) || self.relevance_cache.get(&r) == Some(&true) {
-                        debug!(
-                            "  -> found relevant: {} pos={}",
-                            exprs.expr_to_string(r),
-                            exprs.is_positive(r)
-                        );
-                        let mut mark_relevant = vec![*e];
-                        while let Some(e) = mark_relevant.pop() {
-                            if self.relevance_cache.contains_key(&e) {
-                                continue;
-                            }
-                            self.relevance_cache.insert(e, true);
-                            if let Some(lst) = makes_relevant.get(&e) {
-                                mark_relevant.extend_from_slice(lst);
-                            }
-                        }
-                        assert!(self.relevance_cache[&top_expr]);
-                        debug!("relevant: {:?}", top_expr);
-                        // println!("cost: {}", exprs.cost() - c0);
-                        return Ok(true);
-                    }
-
-                    makes_relevant.entry(r).or_default().push(*e);
-
-                    if !pending.contains(&r) {
-                        // println!("  add {}", exprs.expr_to_string(r));
-                        debug!("  add: {:?}", r);
-                        pending.insert(r);
-                        new_wave.push(r);
-                    }
-                }
+        while !stack.is_empty() {
+            let s = stack.last_mut().unwrap();
+            if s.curr_idx >= s.children.len() {
+                stack.pop();
+                continue;
+            }
+            let curr_node = s.children[s.curr_idx];
+            s.curr_idx += 1;
+            if visited.contains(&curr_node) {
+                continue;
+            }
+            let status = self.relevance_cache.get(&curr_node);
+            if status == Some(&false) {
+                continue;
             }
 
-            front_wave = new_wave;
-
-            if front_wave.is_empty() {
-                debug!("irrelevant: {:?}", top_expr);
-                for e in pending {
-                    self.relevance_cache.insert(e, false);
+            if status == Some(&true) || exprs.is_positive(curr_node) {
+                while let Some(e) = stack.pop() {
+                    debug!("  mark relevant: {}", exprs.expr_to_string(e.expr));
+                    self.relevance_cache.insert(e.expr, true);
                 }
-                assert!(!self.relevance_cache[&top_expr]);
-                // println!("cost: {}", exprs.cost() - c0);
-                return Ok(false);
+                return Ok(true);
+            }
+
+            let dr = self.deriv(exprs, curr_node);
+            exprs.pay(dr.len());
+
+            visited.insert(curr_node);
+            let f = StackFrame {
+                expr: curr_node,
+                curr_idx: 0,
+                children: dr
+                    .iter()
+                    .map(|e| e.1)
+                    .filter(|e| !visited.contains(e))
+                    .collect(),
+            };
+            if !f.children.is_empty() {
+                stack.push(f);
             }
 
             anyhow::ensure!(
@@ -534,6 +549,14 @@ impl RelevanceCache {
                 self.max_fuel
             );
         }
+
+        // we didn't find anything relevant, everything visited is not relevant
+        for &e in &visited {
+            debug!("  mark empty: {}", exprs.expr_to_string(e));
+            self.relevance_cache.insert(e, false);
+        }
+
+        Ok(false)
     }
 }
 
