@@ -455,7 +455,9 @@ impl RelevanceCache {
         let cost_0 = exprs.cost();
         self.cost_limit = cost_0.saturating_add(max_fuel);
         let r = self.is_non_empty_inner(exprs, top_expr);
-        // println!("cost: {}", exprs.cost() - cost_0);
+        if false {
+            println!("cost: {}", exprs.cost() - cost_0);
+        }
         r
     }
 

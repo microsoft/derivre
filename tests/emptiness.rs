@@ -239,7 +239,7 @@ fn test_emptiness_repeats() {
 
     for &json in &[false, true] {
         check_non_empty_limited(".*(.+[@].+[.]___).*", "(?s:.{10,200})", json, lim);
-     
+
         check_non_empty_limited(
             "[A-Z0-9]*([RD][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][XYZ])[A-Z0-9]*",
             "(?s:.{0,36})",
