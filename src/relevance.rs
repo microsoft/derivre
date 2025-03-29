@@ -583,7 +583,7 @@ impl RelevanceCache {
             };
 
             f.children
-                .sort_unstable_by_key(|&e| (exprs.get_size(e), e.0));
+                .sort_unstable_by_key(|&e| (exprs.get_weight(e), e.0));
 
             debug!("  push: {}", exprs.expr_to_string(curr_node));
             for &c in &f.children {

@@ -17,7 +17,7 @@ pub struct PrettyPrinter {
 
 impl PrettyPrinter {
     pub fn expr_to_string(&self, exprset: &ExprSet, id: ExprRef, max_len: usize) -> String {
-        let mut s = format!("|{}| ", exprset.get_size(id));
+        let mut s = String::new(); // format!("|{}| ", exprset.get_weight(id));
         self.write_expr(exprset, id, &mut s, max_len).unwrap();
         s
     }
