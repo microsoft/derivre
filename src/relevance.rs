@@ -333,36 +333,13 @@ impl RelevanceCache {
         Ok(!(self.is_non_empty_inner(exprs, cont)?))
     }
 
-    fn is_contained_in_prefixes_inner(
+    fn is_contained_in_prefixes_repeats(
         &mut self,
         exprs: &mut ExprSet,
-        deriv: &mut DerivCache,
-        mut small: ExprRef,
-        mut big: ExprRef,
+        small: ExprRef,
+        main: ExprRef,
+        except: ExprRef,
     ) -> Result<bool> {
-        debug!(
-            "check contained {} in {}",
-            exprs.expr_to_string(small),
-            exprs.expr_to_string(big)
-        );
-
-        // rewind through any initial forced bytes
-        for _ in 0..10 {
-            match next_byte_simple(exprs, small) {
-                NextByte::ForcedByte(b) => {
-                    small = deriv.derivative(exprs, small, b);
-                    big = deriv.derivative(exprs, big, b);
-                }
-                _ => break,
-            }
-        }
-
-        // split big into main & ~except
-        let (main, except) = a_and_not_b(exprs, big).unwrap_or((big, ExprRef::NO_MATCH));
-        // if (main, except) are of the form (main suffix, except suffix), then
-        // strip the suffix
-        let (main, except) = strip_common_suffix(exprs, main, except);
-
         match (exprs.get(small), exprs.get(main)) {
             (Expr::Repeat(_, small_ch, _, small_high), Expr::Repeat(_, main_ch, _, main_high))
                 if small_high <= main_high && 2 <= main_high =>
@@ -395,6 +372,117 @@ impl RelevanceCache {
                 Ok(false)
             }
         }
+    }
+
+    fn is_contained_in_prefixes_inner(
+        &mut self,
+        exprs: &mut ExprSet,
+        deriv: &mut DerivCache,
+        mut small: ExprRef,
+        mut big: ExprRef,
+    ) -> Result<bool> {
+        debug!(
+            "check contained {} in {}",
+            exprs.expr_to_string(small),
+            exprs.expr_to_string(big)
+        );
+
+        // rewind through any initial forced bytes
+        for _ in 0..10 {
+            match next_byte_simple(exprs, small) {
+                NextByte::ForcedByte(b) => {
+                    small = deriv.derivative(exprs, small, b);
+                    big = deriv.derivative(exprs, big, b);
+                }
+                _ => break,
+            }
+        }
+
+        // split big into main & ~except
+        let (main, except) = a_and_not_b(exprs, big).unwrap_or((big, ExprRef::NO_MATCH));
+
+        // if main is of the form X? Y transform it to Y
+        let main = match exprs.get(main) {
+            Expr::Concat(_, [a, b]) => match exprs.get(a) {
+                Expr::Repeat(_, _, 0, 1) => b,
+                _ => main,
+            },
+            _ => main,
+        };
+
+        match exprs.get(small) {
+            // small = [1-9][0-9]*
+            Expr::Concat(_, [hd, small2])
+                if matches!(exprs.get(small2), Expr::Repeat(_, _, _, _)) =>
+            {
+                let mut left_overs = vec![];
+                let mut stack = vec![main];
+
+                while let Some(main) = stack.pop() {
+                    for &main_b in or_branches(exprs, &[main]) {
+                        debug!(
+                            "  -> check branch {} in {}",
+                            exprs.expr_to_string(hd),
+                            exprs.expr_to_string(main_b)
+                        );
+                        match exprs.get(main_b) {
+                            // if we're in [0-9]* phase of number regex
+                            Expr::Repeat(_, main_ch, _, max_rep) if max_rep > 1 => {
+                                // process is later
+                                left_overs.push((main_ch, max_rep))
+                            }
+                            Expr::Concat(_, [hd2, main2]) => {
+                                if hd == hd2 {
+                                    // if we're in [1-9][0-9]* phase, skip the [1-9]
+                                    // and do check on the rest
+                                    // note that 'except' matching is only done length-wise
+                                    // so this is conservative
+                                    return self.is_contained_in_prefixes_repeats(
+                                        exprs, small2, main2, except,
+                                    );
+                                } else {
+                                    debug!("  -> in concat {}", exprs.expr_to_string(hd2));
+                                    stack.push(hd2);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                for (main_ch, max_rep) in left_overs {
+                    if self.check_contains(exprs, hd, main_ch)? {
+                        let new_rep = if max_rep == u32::MAX {
+                            max_rep
+                        } else {
+                            max_rep - 1
+                        };
+                        let main2 = exprs.mk_repeat(main_ch, 0, new_rep);
+                        if self.is_contained_in_prefixes_repeats(exprs, small2, main2, except)? {
+                            return Ok(true);
+                        }
+                    }
+                }
+                return Ok(false);
+            }
+            _ => {}
+        }
+
+        // if main is an alternative, pick the one which is repeat
+        let main = match exprs.get(main) {
+            Expr::Or(_, ch) => ch
+                .iter()
+                .find(|&a| matches!(exprs.get(*a), Expr::Repeat(_, _, _, _)))
+                .copied()
+                .unwrap_or(main),
+            _ => main,
+        };
+
+        // if (main, except) are of the form (main suffix, except suffix), then
+        // strip the suffix
+        let (main, except) = strip_common_suffix(exprs, main, except);
+
+        self.is_contained_in_prefixes_repeats(exprs, small, main, except)
     }
 
     /// Check if `small` is contained in `big` with a limit on the number of steps.

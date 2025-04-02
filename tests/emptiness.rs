@@ -215,6 +215,20 @@ fn test_prefixes_normal() {
 }
 
 #[test]
+fn test_prefixes_num() {
+    check_contains_prefixes(r"[1-9][0-9]*", r"[0-9]*");
+    check_contains_prefixes(r"[1-9][0-9]*", r"([1-9][0-9]*|0)");
+    check_contains_prefixes(r"[1-9][0-9]*", r"-?[1-9][0-9]*");
+    check_contains_prefixes(r"[1-9][0-9]*", r"-?(0|[1-9][0-9]*)");
+    check_contains_prefixes(r"[1-9][0-9]*", r"-?(0|[1-9][0-9]*)");
+    check_contains_prefixes(
+        r"[1-9][0-9]*",
+        r"-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?",
+    );
+    check_contains_prefixes(r"[1-9][0-9]*", r"([0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?");
+}
+
+#[test]
 fn test_prefixes_except() {
     check_not_contains_prefixes_except(r"f", "fQ", r#"fQ"#);
 
