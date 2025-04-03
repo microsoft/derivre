@@ -335,7 +335,7 @@ impl<'a> Expr<'a> {
 #[derive(Clone)]
 pub struct ExprSet {
     exprs: VecHashCons,
-    expr_weight: Vec<u32>,
+    expr_weight: Vec<(u32, u32)>,
     pub(crate) alphabet_size: usize,
     pub(crate) alphabet_words: usize,
     pub(crate) digits: [u8; 10],
@@ -348,13 +348,15 @@ pub struct ExprSet {
     pub(crate) any_unicode_non_nl: ExprRef,
 }
 
+const ATTR_HAS_REPEAT: u32 = 1;
+
 impl ExprSet {
     pub fn new(alphabet_size: usize) -> Self {
         let exprs = VecHashCons::new();
         let alphabet_words = (alphabet_size + 31) / 32;
         let mut r = ExprSet {
             exprs,
-            expr_weight: vec![0],
+            expr_weight: vec![],
             alphabet_size,
             alphabet_words,
             digits: [b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9'],
@@ -459,14 +461,16 @@ impl ExprSet {
         let mut todo = vec![e];
         let mut mapped = Vec::with_capacity(32);
         while let Some(e) = todo.pop() {
-            if self.get_cached_weight(e) != 0 {
+            if self.get_cached_attrs(e).0 != 0 {
                 continue;
             }
             mapped.clear();
             let mut needs_more_work = false;
+            let mut flags = 0;
             for &c in self.get_args(e) {
-                let w = self.get_cached_weight(c);
-                if w == 0 {
+                let w = self.get_cached_attrs(c);
+                flags |= w.1;
+                if w.0 == 0 {
                     if !needs_more_work {
                         todo.push(e);
                         needs_more_work = true;
@@ -486,22 +490,25 @@ impl ExprSet {
                 Expr::Byte(_) => 1,
                 Expr::ByteSet(_) => 2,
                 Expr::RemainderIs { .. } => 100,
-                Expr::Lookahead(_, _, _) => mapped[0] + 1,
-                Expr::Not(_, _) => mapped[0] + 50,
+                Expr::Lookahead(_, _, _) => mapped[0].0 + 1,
+                Expr::Not(_, _) => mapped[0].0 + 50,
                 Expr::Repeat(_, _, min, max) => {
-                    mapped[0] + std::cmp::min(min, 10) + std::cmp::min(max, 10)
+                    if max >= 2 {
+                        flags |= ATTR_HAS_REPEAT;
+                    }
+                    mapped[0].0 + std::cmp::min(min, 10) + std::cmp::min(max, 10)
                 }
-                Expr::Concat(_, _) => mapped[0] + mapped[1] + 1,
-                Expr::Or(_, _) => mapped.iter().sum(),
-                Expr::And(_, _) => mapped.iter().sum::<u32>() + 20,
-                Expr::ByteConcat(_, items, _) => items.len() as u32 + mapped[0],
+                Expr::Concat(_, _) => mapped[0].0 + mapped[1].0 + 1,
+                Expr::Or(_, _) => mapped.iter().map(|e| e.0).sum(),
+                Expr::And(_, _) => mapped.iter().map(|e| e.0).sum::<u32>() + 20,
+                Expr::ByteConcat(_, items, _) => items.len() as u32 + mapped[0].0,
             };
 
             let idx = e.0 as usize;
             if idx >= self.expr_weight.len() {
-                self.expr_weight.resize(idx + 100, 0);
+                self.expr_weight.resize(idx + 100, (0, 0));
             }
-            self.expr_weight[idx] = w;
+            self.expr_weight[idx] = (w, flags);
         }
         0
     }
@@ -513,17 +520,33 @@ impl ExprSet {
         ExprRef(self.exprs.finish_insert())
     }
 
-    fn get_cached_weight(&self, id: ExprRef) -> u32 {
-        self.expr_weight.get(id.0 as usize).copied().unwrap_or(0)
+    fn get_cached_attrs(&self, id: ExprRef) -> (u32, u32) {
+        self.expr_weight
+            .get(id.0 as usize)
+            .copied()
+            .unwrap_or((0, 0))
+    }
+
+    fn get_attrs(&mut self, id: ExprRef) -> (u32, u32) {
+        let mut r = self.get_cached_attrs(id);
+        if r.0 == 0 {
+            self.compute_weight(id);
+            r = self.get_cached_attrs(id);
+        }
+        r
     }
 
     pub fn get_weight(&mut self, id: ExprRef) -> u32 {
-        let mut w = self.get_cached_weight(id);
-        if w == 0 {
-            self.compute_weight(id);
-            w = self.get_cached_weight(id);
-        }
-        w
+        self.get_attrs(id).0
+    }
+
+    fn get_attr_flags(&mut self, id: ExprRef) -> u32 {
+        self.get_attrs(id).1
+    }
+
+    pub fn attr_has_repeat(&mut self, id: ExprRef) -> bool {
+        let w = self.get_attr_flags(id);
+        (w & ATTR_HAS_REPEAT) != 0
     }
 
     pub fn get(&self, id: ExprRef) -> Expr {
