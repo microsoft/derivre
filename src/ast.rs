@@ -504,6 +504,23 @@ impl ExprSet {
                 Expr::ByteConcat(_, items, _) => items.len() as u32 + mapped[0].0,
             };
 
+            // if we hit a very large size (likely to due to DAG-like structure of the regex),
+            // switch to a mode where we compute depth of the regex tree, not size
+            let off = 1_000_000;
+            let w = if w < off {
+                w
+            } else {
+                std::cmp::max(
+                    off,
+                    match self.get(e) {
+                        Expr::Concat(_, _) => std::cmp::max(mapped[0].0, mapped[1].0) + 1,
+                        Expr::Or(_, _) => mapped.iter().map(|e| e.0).max().unwrap() + 5,
+                        Expr::And(_, _) => mapped.iter().map(|e| e.0).max().unwrap() + 20,
+                        _ => w,
+                    },
+                )
+            };
+
             let idx = e.0 as usize;
             if idx >= self.expr_weight.len() {
                 self.expr_weight.resize(idx + 100, (0, 0));
