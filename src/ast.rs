@@ -344,6 +344,7 @@ pub struct ExprSet {
     pp: PrettyPrinter,
     pub(crate) optimize: bool,
     pub(crate) unicode_cache: HashMap<Vec<(char, char)>, ExprRef>,
+    pub(crate) any_unicode_star: ExprRef,
     pub(crate) any_unicode: ExprRef,
     pub(crate) any_unicode_non_nl: ExprRef,
 }
@@ -367,6 +368,7 @@ impl ExprSet {
             unicode_cache: HashMap::default(),
             any_unicode: ExprRef::INVALID,
             any_unicode_non_nl: ExprRef::INVALID,
+            any_unicode_star: ExprRef::INVALID,
         };
 
         let id = r.exprs.insert(&[]);
