@@ -319,7 +319,7 @@ impl<'a> Expr<'a> {
             Expr::And(flags, es) => nary_serialize(trg, flags.encode(ExprTag::And), es),
             Expr::ByteConcat(flags, bytes, tail) => {
                 assert!(bytes.len() <= ExprRef::MAX_BYTE_CONCAT);
-                let mut buf32 = [0u32; 2 + ((ExprRef::MAX_BYTE_CONCAT + 1) + 3) / 4];
+                let mut buf32 = [0u32; 2 + (ExprRef::MAX_BYTE_CONCAT + 1).div_ceil(4)];
                 buf32[0] = flags.encode(ExprTag::ByteConcat);
                 buf32[1] = tail.0;
                 let buf = bytemuck::cast_slice_mut(&mut buf32[2..]);
@@ -354,7 +354,7 @@ const ATTR_HAS_REPEAT: u32 = 1;
 impl ExprSet {
     pub fn new(alphabet_size: usize) -> Self {
         let exprs = VecHashCons::new();
-        let alphabet_words = (alphabet_size + 31) / 32;
+        let alphabet_words = alphabet_size.div_ceil(32);
         let mut r = ExprSet {
             exprs,
             expr_weight: vec![],
