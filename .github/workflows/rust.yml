@@ -34,8 +34,8 @@ jobs:
         toolchain: 1.80.0
         override: true
         components: clippy
-    - run: cargo build --locked
-    - run: cargo test --locked
+    - run: cargo build --verbose --locked
+    - run: cargo test --verbose --locked
     - run: cargo clippy --all-targets --all-features -- -D warnings
 
   crates:
