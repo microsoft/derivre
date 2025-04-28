@@ -29,10 +29,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Set up Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@1.80.0
       with:
-        toolchain: 1.80.0
-        override: true
         components: clippy
     - run: cargo build --verbose --locked
     - run: cargo test --verbose --locked
